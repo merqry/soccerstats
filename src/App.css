@@ -1,0 +1,11 @@
+/* App-specific styles */
+#root {
+  min-height: 100vh;
+}
+
+/* Remove default button styles to let Tailwind handle them */
+button {
+  border: none;
+  background: none;
+  font-family: inherit;
+}
