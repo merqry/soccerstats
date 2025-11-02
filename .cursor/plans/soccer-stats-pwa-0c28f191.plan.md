@@ -91,14 +91,17 @@
 ### Schema Changes Required
 
 **New Table: GameMetrics**
+
 - Purpose: Track which metrics were selected for each game
 - Relationship: Many-to-many junction table between Games and Metrics
 - Fields: `id`, `gameId`, `metricId`
 
 **Updated Game Interface:**
+
 - Add `status: 'in_progress' | 'completed'` field
 
 **Updated Metric Interface:**
+
 - Add `dependsOn: number[]` field for metric dependencies
 - Update `metricFormula` to use structured format (see Formula Storage section)
 
@@ -110,17 +113,20 @@
 4. **Metrics**: Pre-defined calculated metrics (seeded)
 5. **GameActions**: Junction table - tracks action counts per game
 6. **GameMetrics**: Junction table - tracks selected metrics per game (NEW)
+7. MetricActions: identifies which actions are associated with each metric (NEW)
 
 ## Implementation Steps
 
 ### 0. Update Database Schema (NEW STEP)
 
 **Files to modify:**
+
 - `src/types/index.ts` - Add GameMetric interface and update Game/Metric interfaces
 - `src/db/database.ts` - Add gameMetrics table and migrate to version 2
 - `src/hooks/useDB.ts` - Add functions for GameMetrics operations
 
 **Changes:**
+
 1. Add `GameMetric` interface with `gameId` and `metricId`
 2. Add `status` field to `Game` interface
 3. Add `dependsOn` field to `Metric` interface
@@ -208,6 +214,7 @@ Add missing functions:
 ## Formula Storage System (PROPOSED)
 
 ### Current Problem
+
 - Formulas stored as strings are hard to parse dynamically
 - Hard-coded if/else logic for each metric type
 - No support for metric dependencies
@@ -216,6 +223,7 @@ Add missing functions:
 ### Proposed Solution: Structured Formula Format
 
 **Option 1: JSON-Based Formula Structure**
+
 ```typescript
 interface FormulaNode {
   type: 'action' | 'metric' | 'operation' | 'number';
@@ -234,6 +242,7 @@ interface Metric {
 ```
 
 **Example Formula Structure:**
+
 ```json
 // "Shots on Target %" formula
 {
@@ -257,6 +266,7 @@ interface Metric {
 ```
 
 **Option 2: Expression Tree Format**
+
 ```typescript
 interface ExpressionTree {
   operator: '+' | '-' | '*' | '/' | 'percentage';
@@ -275,6 +285,7 @@ interface MetricReference {
 ```
 
 **Option 3: Simple Dependency-Based System**
+
 ```typescript
 interface Metric {
   id?: number;
@@ -291,12 +302,14 @@ interface Metric {
 ### Recommended Approach: Option 3 (Hybrid)
 
 **Benefits:**
+
 - Minimal changes to existing code
 - Easy to understand and maintain
 - Supports dependencies
 - Allows for future formula parsing improvements
 
 **Implementation:**
+
 1. Add `dependsOn` and `requiredActions` arrays to Metric interface
 2. Update seed data to include these fields
 3. Modify calculation logic to handle dependencies
@@ -307,6 +320,7 @@ interface Metric {
 ### Enhanced Metric Calculation Logic
 
 **Dependency Resolution Algorithm:**
+
 1. Build dependency graph from `dependsOn` fields
 2. Topologically sort metrics to resolve dependencies
 3. Calculate base metrics first (no dependencies)
@@ -314,6 +328,7 @@ interface Metric {
 5. Handle circular dependencies gracefully
 
 **Formula Evaluation Process:**
+
 1. Get all required actions for selected metrics
 2. Build action count lookup table
 3. Resolve metric dependencies in correct order
@@ -321,29 +336,46 @@ interface Metric {
 5. Return calculated values with proper formatting
 
 ### - Tracked actions: 
-Shot on Target, 
-Shot off Target, 
+
+Shot on Target,
+
+Shot off Target,
+
 Successful Dribble,
+
 Unsuccessful Dribble,
-Complete Pass, 
+
+Complete Pass,
+
 Incomplete Pass,
-Pass Forward, 
-Line-breaking Pass, 
-Successful Tackle, 
-Missed Tackle, 
-Successful Interception, 
+
+Pass Forward,
+
+Line-breaking Pass,
+
+Successful Tackle,
+
+Missed Tackle,
+
+Successful Interception,
+
 Progressive Carry,
+
 Cross into the Box
 
-
 ### Calculated metrics: 
-Shots on Target = Shots on Target / (Shot on Target + Shot off Target)
-Total Passes = (Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass)  
-Pass Completion Rate = (Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes
-Dribble Success Rate = Successful Dribble / (Successful Dribble + Unsuccessful Dribble)
-Successful Tackle Rate = Successful Tackle / (Successful Tackle + Missed Tackle)
-Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble
 
+Shots on Target = Shots on Target / (Shot on Target + Shot off Target)
+
+Total Passes = (Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass)
+
+Pass Completion Rate = (Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes
+
+Dribble Success Rate = Successful Dribble / (Successful Dribble + Unsuccessful Dribble)
+
+Successful Tackle Rate = Successful Tackle / (Successful Tackle + Missed Tackle)
+
+Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble
 
 ### Data Flow
 
@@ -355,6 +387,7 @@ Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass
 ### Auto-generated Game Title
 
 Format: "vs [Opponent] - [Date]"
+
 Example: "vs Manchester United - 10/26/2025"
 
 ### To-dos
