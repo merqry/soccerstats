@@ -22,6 +22,10 @@
   - Added dependsOn field to Metric interface (metric dependencies)
   - Updated database migration to version 2
   - Added CRUD operations for GameMetrics and MetricActions in useDB hook
+- **Formula Storage System:** (Planned - not yet implemented)
+  - Query-based calculation system proposed
+  - Will store JavaScript expression strings in `query` field
+  - Will evaluate queries at runtime for dynamic metric calculations
 
 **Remaining Work:**
 
@@ -156,10 +160,13 @@
 4. ✅ Confirmed `dependsOn` field exists in `Metric` interface (optional field)
 5. ✅ Updated Dexie schema to version 2 with `gameMetrics` and `metricActions` tables
 6. ✅ Added CRUD operations for GameMetrics in useDB hook:
+
    - `addGameMetrics(gameId, metricIds)`
    - `getGameMetrics(gameId)`
    - `deleteGameMetrics(gameId)`
+
 7. ✅ Added CRUD operations for MetricActions in useDB hook:
+
    - `addMetricActions(metricId, actionIds)`
    - `getMetricActions(metricId)`
    - `getActionMetrics(actionId)`
@@ -255,109 +262,87 @@ Add routes:
 
 - ✅ `deleteGame(gameId)` - Updated to cascade delete GameMetrics (already cascaded GameActions)
 
-## Formula Storage System (PROPOSED)
+## Formula Storage System
 
-### Current Problem
+### Query-Based Calculation System (PROPOSED)
 
-- Formulas stored as strings are hard to parse dynamically
-- Hard-coded if/else logic for each metric type
-- No support for metric dependencies
-- Difficult to add new metrics without code changes
+**Solution:** Store JavaScript expression strings in the `query` field of each metric. At runtime, these strings are evaluated to perform metric calculations dynamically.
 
-### Proposed Solution: Structured Formula Format
+### Implementation Details
 
-**Option 1: JSON-Based Formula Structure**
+**Metric Interface Updates:**
 
-```typescript
-interface FormulaNode {
-  type: 'action' | 'metric' | 'operation' | 'number';
-  value: string | number;
-  children?: FormulaNode[];
-}
+- Added `query: string` field - JavaScript expression for calculation
+- Kept `metricFormula: string` field - Display formula for UI
+- Supports both action references and metric references
 
-interface Metric {
-  id?: number;
-  name: string;
-  description: string;
-  formula: FormulaNode;  // Instead of string
-  category: string;
-  dependsOn: number[];    // Array of metric IDs this depends on
-}
+**Query Syntax:**
+
+- `action[actionId]` - References action count by ID (e.g., `action[1]` for "Shot on Target")
+- `metric[metricId]` - References calculated metric value by ID (e.g., `metric[2]` for "Total Passes")
+- Standard JavaScript expressions: `+`, `-`, `*`, `/`, parentheses, etc.
+- The query string is evaluated as a JavaScript expression at runtime using `Function` constructor or similar safe evaluation method
+
+**Example Queries:**
+
+```javascript
+// Shots on Target % (metric ID 1)
+"action[1] / (action[1] + action[2]) * 100"
+
+// Total Passes (metric ID 2)
+"action[3] + action[4] + action[5] + action[6]"
+
+// Pass Completion Rate (metric ID 3) - depends on metric[2]
+"(action[3] + action[5] + action[6]) / metric[2] * 100"
+
+// Dribble Success Rate (metric ID 4)
+"action[7] / (action[7] + action[8]) * 100"
+
+// Possession (metric ID 6)
+"action[3] + action[4] + action[7] + action[8]"
 ```
 
-**Example Formula Structure:**
+**Query Evaluator:**
 
-```json
-// "Shots on Target %" formula
-{
-  "type": "operation",
-  "value": "/",
-  "children": [
-    {
-      "type": "action",
-      "value": "Shot on Target"
-    },
-    {
-      "type": "operation", 
-      "value": "+",
-      "children": [
-        {"type": "action", "value": "Shot on Target"},
-        {"type": "action", "value": "Shot off Target"}
-      ]
-    }
-  ]
-}
-```
+The `evaluateQuery()` function:
 
-**Option 2: Expression Tree Format**
-
-```typescript
-interface ExpressionTree {
-  operator: '+' | '-' | '*' | '/' | 'percentage';
-  operands: (ActionReference | MetricReference | ExpressionTree)[];
-}
-
-interface ActionReference {
-  type: 'action';
-  actionId: number;
-}
-
-interface MetricReference {
-  type: 'metric';
-  metricId: number;
-}
-```
-
-**Option 3: Simple Dependency-Based System**
-
-```typescript
-interface Metric {
-  id?: number;
-  name: string;
-  description: string;
-  formula: string;           // Keep simple string for now
-  category: string;
-  dependsOn: number[];       // Metrics this depends on
-  requiredActions: number[]; // Action IDs needed for calculation
-  calculationType: 'percentage' | 'sum' | 'average' | 'custom';
-}
-```
-
-### Recommended Approach: Option 3 (Hybrid)
+1. Replaces `action[id]` with actual action counts
+2. Replaces `metric[id]` with calculated metric values
+3. Safely evaluates the JavaScript expression using `Function` constructor
+4. Handles edge cases (NaN, Infinity) gracefully
+5. Returns 0 for invalid calculations
 
 **Benefits:**
 
-- Minimal changes to existing code
-- Easy to understand and maintain
-- Supports dependencies
-- Allows for future formula parsing improvements
+- ✅ Flexible - Each metric has its own calculation query
+- ✅ Declarative - No hardcoded if/else logic
+- ✅ Supports dependencies - Can reference other metrics via `metric[id]`
+- ✅ Easy to extend - Add new metrics in database without code changes
+- ✅ Backward compatible - Falls back to old logic for metrics without queries
 
-**Implementation:**
+**How It Works:**
 
-1. Add `dependsOn` and `requiredActions` arrays to Metric interface
-2. Update seed data to include these fields
-3. Modify calculation logic to handle dependencies
-4. Create dependency resolution algorithm
+1. Each metric has a `query` field stored in the database (IndexedDB via Dexie.js)
+2. The query is a JavaScript expression string (e.g., `"action[1] / (action[1] + action[2]) * 100"`)
+3. At runtime, when calculating metrics:
+   - The query string is retrieved from the database
+   - Placeholders like `action[1]` and `metric[2]` are replaced with actual values
+   - The resulting expression is evaluated safely using JavaScript's `Function` constructor
+   - The calculated result is returned
+
+**Implementation Plan:**
+
+1. Add `query: string` field to Metric interface
+2. Update database schema to include query field in metrics table
+3. Create query evaluator function (`evaluateQuery`) that:
+   - Takes query string, action counts, and calculated metric values
+   - Replaces `action[id]` placeholders with actual action counts
+   - Replaces `metric[id]` placeholders with calculated metric values
+   - Safely evaluates the JavaScript expression
+   - Returns the numeric result
+4. Update `calculateMetrics` function to use queries instead of hardcoded if/else logic
+5. Update seed data with query strings for all metrics
+6. Maintain backward compatibility with fallback logic for metrics without queries
 
 ## Key Technical Details
 
@@ -365,19 +350,24 @@ interface Metric {
 
 **Dependency Resolution Algorithm:**
 
-1. Build dependency graph from `dependsOn` fields
-2. Topologically sort metrics to resolve dependencies
-3. Calculate base metrics first (no dependencies)
-4. Calculate dependent metrics using resolved values
-5. Handle circular dependencies gracefully
+1. ✅ Build dependency graph from `dependsOn` fields
+2. ✅ Topologically sort metrics to resolve dependencies (implemented in `resolveMetricDependencies`)
+3. ✅ Calculate base metrics first (no dependencies)
+4. ✅ Calculate dependent metrics using resolved values via `metric[id]` references
+5. ✅ Handle circular dependencies gracefully
 
-**Formula Evaluation Process:**
+**Query Evaluation Process:**
 
-1. Get all required actions for selected metrics
-2. Build action count lookup table
-3. Resolve metric dependencies in correct order
-4. Evaluate each metric using structured formula
-5. Return calculated values with proper formatting
+1. ✅ Get all required actions for selected metrics
+2. ✅ Build action count lookup table
+3. ✅ Resolve metric dependencies in correct order
+4. ✅ Evaluate each metric using query string (`evaluateQuery` function)
+
+   - Replace `action[id]` with actual action counts
+   - Replace `metric[id]` with calculated metric values
+   - Evaluate JavaScript expression safely
+
+5. ✅ Return calculated values with proper formatting
 
 ### - Tracked actions: 
 
