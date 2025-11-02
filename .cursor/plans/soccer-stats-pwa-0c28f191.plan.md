@@ -15,14 +15,16 @@
 - Routing setup (`src/App.tsx`)
 - Basic styling with inline CSS
 - PWA configuration (`vite.config.ts`, `public/manifest.json`)
+- **Database schema updates:**
+  - Added GameMetrics table (junction table for Games and Metrics)
+  - Added MetricActions table (junction table for Metrics and Actions)
+  - Added status field to Game interface (`'in_progress' | 'completed'`)
+  - Added dependsOn field to Metric interface (metric dependencies)
+  - Updated database migration to version 2
+  - Added CRUD operations for GameMetrics and MetricActions in useDB hook
 
 **Remaining Work:**
 
-- **Add GameMetrics table to database schema** (NEW)
-- **Add status field to Game interface** (NEW)
-- **Implement dynamic formula parsing system** (NEW)
-- **Add metric dependency tracking** (NEW)
-- Update database migration to version 2
 - Implement NewGame page (player selection, opponent input, metric selection)
 - Implement GameTracker component (action buttons, real-time metric calculations)
 - Implement History page (game list with filtering)
@@ -66,11 +68,11 @@
      │     └──────────────────┐
      │                        │
 ┌────▼─────────┐      ┌───────▼────────┐
-│ GameActions  │      │  GameMetrics   │ ← NEW TABLE
+│ GameActions  │      │  GameMetrics   │
 │──────────────│      │────────────────│
 │ id (PK)      │      │ id (PK)        │
-│ gameId (FK)  │      │ gameId (FK)    │
-│ actionId (FK)│      │ metricId (FK)  │
+│ gameId (FK)  │      │ gameId (FK)   │
+│ actionId (FK)│      │ metricId (FK) │
 │ count        │      └───────┬────────┘
 │ timestamp    │              │ N
 └──────┬───────┘              │
@@ -84,54 +86,84 @@
 │ name        │         │ description│
 │ description │         │ formula    │
 │ category    │         │ category   │
-└─────────────┘         │ dependsOn  │ ← NEW: metric dependencies
-                        └────────────┘
+└──────┬──────┘         │ dependsOn │
+       │ 1              └──────┬─────┘
+       │                       │ 1
+       │ N                     │ N
+       │                       │
+┌──────▼───────────────────────▼──────┐
+│         MetricActions               │ ← NEW TABLE
+│────────────────────────────────────│
+│ id (PK)                             │
+│ metricId (FK)                       │
+│ actionId (FK)                       │
+└────────────────────────────────────┘
 ```
 
 ### Schema Changes Required
 
-**New Table: GameMetrics**
+**New Table: GameMetrics** ✅ COMPLETED
 
 - Purpose: Track which metrics were selected for each game
 - Relationship: Many-to-many junction table between Games and Metrics
 - Fields: `id`, `gameId`, `metricId`
+- Status: Implemented in `src/types/index.ts` and `src/db/database.ts`
 
-**Updated Game Interface:**
+**New Table: MetricActions** ✅ COMPLETED
 
-- Add `status: 'in_progress' | 'completed'` field
+- Purpose: Identify which actions are associated with each metric
+- Relationship: Many-to-many junction table between Metrics and Actions
+- Fields: `id`, `metricId`, `actionId`
+- Status: Implemented in `src/types/index.ts` and `src/db/database.ts`
+- Operations: Added CRUD functions in `src/hooks/useDB.ts`
 
-**Updated Metric Interface:**
+**Updated Game Interface:** ✅ COMPLETED
 
-- Add `dependsOn: number[]` field for metric dependencies
-- Update `metricFormula` to use structured format (see Formula Storage section)
+- Added `status: 'in_progress' | 'completed'` field
+- Status: Updated in `src/types/index.ts` (already had optional status field)
+
+**Updated Metric Interface:** ✅ COMPLETED
+
+- Added `dependsOn: number[]` field for metric dependencies
+- Already includes `requiredActions?: number[]` and `calculationType?: 'percentage' | 'sum' | 'average' | 'custom'`
+- Status: Updated in `src/types/index.ts` (fields already existed in interface)
 
 ### Tables Overview
 
 1. **Players**: Core player information
-2. **Games**: Game metadata and context
+2. **Games**: Game metadata and context (includes `status` field)
 3. **Actions**: Pre-defined action types (seeded)
-4. **Metrics**: Pre-defined calculated metrics (seeded)
+4. **Metrics**: Pre-defined calculated metrics (seeded, includes `dependsOn` field)
 5. **GameActions**: Junction table - tracks action counts per game
-6. **GameMetrics**: Junction table - tracks selected metrics per game (NEW)
-7. MetricActions: identifies which actions are associated with each metric (NEW)
+6. **GameMetrics**: Junction table - tracks selected metrics per game ✅
+7. **MetricActions**: Junction table - identifies which actions are associated with each metric ✅
 
 ## Implementation Steps
 
-### 0. Update Database Schema (NEW STEP)
+### 0. Update Database Schema ✅ COMPLETED
 
-**Files to modify:**
+**Files modified:**
 
-- `src/types/index.ts` - Add GameMetric interface and update Game/Metric interfaces
-- `src/db/database.ts` - Add gameMetrics table and migrate to version 2
-- `src/hooks/useDB.ts` - Add functions for GameMetrics operations
+- `src/types/index.ts` - Added GameMetric and MetricAction interfaces; updated Game/Metric interfaces
+- `src/db/database.ts` - Added gameMetrics and metricActions tables; migrated to version 2
+- `src/hooks/useDB.ts` - Added functions for GameMetrics and MetricActions operations
 
-**Changes:**
+**Changes completed:**
 
-1. Add `GameMetric` interface with `gameId` and `metricId`
-2. Add `status` field to `Game` interface
-3. Add `dependsOn` field to `Metric` interface
-4. Update Dexie schema to version 2 with new table
-5. Add CRUD operations for GameMetrics in useDB hook
+1. ✅ Added `GameMetric` interface with `gameId` and `metricId`
+2. ✅ Added `MetricAction` interface with `metricId` and `actionId`
+3. ✅ Confirmed `status` field exists in `Game` interface (optional field)
+4. ✅ Confirmed `dependsOn` field exists in `Metric` interface (optional field)
+5. ✅ Updated Dexie schema to version 2 with `gameMetrics` and `metricActions` tables
+6. ✅ Added CRUD operations for GameMetrics in useDB hook:
+   - `addGameMetrics(gameId, metricIds)`
+   - `getGameMetrics(gameId)`
+   - `deleteGameMetrics(gameId)`
+7. ✅ Added CRUD operations for MetricActions in useDB hook:
+   - `addMetricActions(metricId, actionIds)`
+   - `getMetricActions(metricId)`
+   - `getActionMetrics(actionId)`
+   - `deleteMetricActions(metricId)`
 
 ### 1. New Game Page
 
@@ -200,16 +232,28 @@ Add routes:
 
 **File:** `src/hooks/useDB.ts`
 
-Add missing functions:
+**Completed functions:**
 
-- `getGamesByPlayer(playerId, status?)`
-- `getGameActions(gameId)`
-- `getGameMetrics(gameId)` (NEW)
-- `addGameMetrics(gameId, metricIds)` (NEW)
-- `calculateMetrics(gameId)` (enhanced with dependency resolution)
-- `deleteGame(gameId)`
-- `resolveMetricDependencies(metricIds)` (NEW)
-- `getRequiredActionsForMetrics(metricIds)` (NEW)
+- ✅ `getGamesByPlayer(playerId)` - Already implemented
+- ✅ `getGameActions(gameId)` - Already implemented
+- ✅ `getGameMetrics(gameId)` - ✅ Added
+- ✅ `addGameMetrics(gameId, metricIds)` - ✅ Added
+- ✅ `deleteGameMetrics(gameId)` - ✅ Added
+- ✅ `addMetricActions(metricId, actionIds)` - ✅ Added
+- ✅ `getMetricActions(metricId)` - ✅ Added
+- ✅ `getActionMetrics(actionId)` - ✅ Added
+- ✅ `deleteMetricActions(metricId)` - ✅ Added
+- ✅ `resolveMetricDependencies(metricIds)` - ✅ Already implemented
+- ✅ `getRequiredActionsForMetrics(metricIds)` - ✅ Already implemented
+- ✅ `calculateMetrics(gameId, selectedMetricIds?)` - ✅ Already implemented with dependency resolution
+
+**Remaining functions:**
+
+- `getGamesByPlayer(playerId, status?)` - Add optional status filter
+
+**Recent improvements:**
+
+- ✅ `deleteGame(gameId)` - Updated to cascade delete GameMetrics (already cascaded GameActions)
 
 ## Formula Storage System (PROPOSED)
 
@@ -399,9 +443,15 @@ Example: "vs Manchester United - 10/26/2025"
 - [x] Implement game history view and analytics display
 - [x] Add PWA manifest, service worker, and offline capabilities
 - [x] Apply mobile-first responsive styling with Tailwind CSS
-- [ ] **Add GameMetrics table and status field to database schema**
-- [ ] **Implement dependency-based metric calculation system**
-- [ ] **Update seed data with metric dependencies and required actions**
-- [ ] **Enhance GameTracker with dependency resolution**
-- [ ] **Update GameDetails to load metrics from GameMetrics table**
+- [x] **Add GameMetrics table and MetricActions table to database schema**
+- [x] **Add status field to Game interface**
+- [x] **Add dependsOn field to Metric interface**
+- [x] **Update database migration to version 2**
+- [x] **Add CRUD operations for GameMetrics and MetricActions in useDB hook**
+- [x] **Add dependency resolution functions (resolveMetricDependencies, getRequiredActionsForMetrics)**
+- [ ] **Implement NewGame page (player selection, opponent input, metric selection)**
+- [ ] **Implement GameTracker component with dependency resolution**
+- [ ] **Implement History page (game list with filtering)**
+- [ ] **Implement GameDetails component (detailed game statistics)**
+- [ ] **Add routes for new pages to App.tsx**
 - [ ] **Test and refine enhanced metric calculation system**

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../db/database';
-import type { Player, Game, GameAction, MetricCalculation, GameMetric } from '../types';
+import type { Player, Game, GameAction, MetricCalculation, GameMetric, MetricAction } from '../types';
 import { initialActions, initialMetrics } from '../db/seed';
 
 export const useDB = () => {
@@ -66,8 +66,9 @@ export const useDB = () => {
   };
 
   const deleteGame = async (id: number) => {
-    // Also delete associated game actions
+    // Also delete associated game actions and game metrics
     await db.gameActions.where('gameId').equals(id).delete();
+    await db.gameMetrics.where('gameId').equals(id).delete();
     return await db.games.delete(id);
   };
 
@@ -128,6 +129,27 @@ export const useDB = () => {
 
   const deleteGameMetrics = async (gameId: number) => {
     return await db.gameMetrics.where('gameId').equals(gameId).delete();
+  };
+
+  // MetricAction operations
+  const addMetricActions = async (metricId: number, actionIds: number[]) => {
+    const metricActions: Omit<MetricAction, 'id'>[] = actionIds.map(actionId => ({
+      metricId,
+      actionId
+    }));
+    return await db.metricActions.bulkAdd(metricActions);
+  };
+
+  const getMetricActions = async (metricId: number) => {
+    return await db.metricActions.where('metricId').equals(metricId).toArray();
+  };
+
+  const getActionMetrics = async (actionId: number) => {
+    return await db.metricActions.where('actionId').equals(actionId).toArray();
+  };
+
+  const deleteMetricActions = async (metricId: number) => {
+    return await db.metricActions.where('metricId').equals(metricId).delete();
   };
 
   // Dependency resolution
@@ -316,6 +338,18 @@ export const useDB = () => {
     updateGameAction,
     getGameActions,
     incrementGameAction,
-    calculateMetrics
+    // GameMetric operations
+    addGameMetrics,
+    getGameMetrics,
+    deleteGameMetrics,
+    // MetricAction operations
+    addMetricActions,
+    getMetricActions,
+    getActionMetrics,
+    deleteMetricActions,
+    // Metric calculation
+    calculateMetrics,
+    resolveMetricDependencies,
+    getRequiredActionsForMetrics
   };
 };
