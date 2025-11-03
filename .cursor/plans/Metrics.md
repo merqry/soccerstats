@@ -1,19 +1,24 @@
 # Metrics DEsign Plan
 
 ## Tracked actions: 
--Shot on Target,
--Shot off Target,
--Successful Dribble,
--Unsuccessful Dribble,
--Complete Pass,
--Incomplete Pass,
--Pass Forward,
--Line-breaking Pass,
--Successful Tackle,
--Missed Tackle,
--Successful Interception,
--Progressive Carry,
--Cross into the Box
+
+Each action has a color attribute with the following values: `green`, `light green`, `light red`, `red`
+
+| Action | Color | Rationale |
+|--------|-------|-----------|
+| Shot on Target | green | Highly positive - direct scoring opportunity |
+| Shot off Target | light red | Negative - missed opportunity |
+| Successful Dribble | light green | Positive - successful offensive play |
+| Unsuccessful Dribble | light red | Negative - failed attempt |
+| Complete Pass | light green | Positive - successful pass |
+| Incomplete Pass | light red | Negative - failed pass |
+| Pass Forward | light green | Positive - attacking movement |
+| Line-breaking Pass | green | Highly positive - excellent attacking play |
+| Successful Tackle | green | Highly positive - excellent defensive play |
+| Missed Tackle | light red | Negative - failed defensive attempt |
+| Successful Interception | green | Highly positive - excellent defensive play |
+| Progressive Carry | light green | Positive - ball advancement |
+| Cross into the Box | light green | Positive - good attacking play |
 
 ## Calculated metrics: 
 1. Shots on Target = Shots on Target / (Shot on Target + Shot off Target)

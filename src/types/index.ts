@@ -22,6 +22,7 @@ export interface Action {
   name: string;
   description: string;
   category: string;
+  color?: 'green' | 'light green' | 'light red' | 'red';
 }
 
 export interface Metric {

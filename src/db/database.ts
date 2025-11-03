@@ -15,7 +15,7 @@ export class SoccerStatsDB extends Dexie {
     this.version(2).stores({
       players: '++id, name, position, teamName, createdAt',
       games: '++id, playerId, opponent, gameDate, title, timestamp, notes, status',
-      actions: '++id, name, description, category',
+      actions: '++id, name, description, category, color',
       metrics: '++id, name, description, metricFormula, category, dependsOn, requiredActions, calculationType',
       gameActions: '++id, gameId, actionId, count, timestamp',
       gameMetrics: '++id, gameId, metricId',

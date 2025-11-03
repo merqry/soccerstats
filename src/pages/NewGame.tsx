@@ -7,7 +7,7 @@ import { GameTracker } from '../components/GameTracker';
 
 export const NewGame: React.FC = () => {
   const navigate = useNavigate();
-  const { getPlayers, addGame, addGameMetrics, isReady } = useDB();
+  const { getPlayers, addGame, addGameMetrics, deleteGameMetrics, isReady } = useDB();
   
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -68,6 +68,33 @@ export const NewGame: React.FC = () => {
     navigate('/history');
   };
 
+  const handleEditMetrics = async () => {
+    // When editing metrics, go back to metrics selection
+    setStep('metrics');
+  };
+
+  const handleMetricsUpdated = async (updatedMetrics: number[]) => {
+    // Update selected metrics
+    setSelectedMetrics(updatedMetrics);
+    
+    // Update GameMetrics table if game already exists
+    if (currentGameId) {
+      try {
+        // Delete existing game metrics
+        await deleteGameMetrics(currentGameId);
+        // Add updated metrics
+        if (updatedMetrics.length > 0) {
+          await addGameMetrics(currentGameId, updatedMetrics);
+        }
+        // Return to tracking
+        setStep('tracking');
+      } catch (error) {
+        console.error('Error updating game metrics:', error);
+        alert('Failed to update metrics. Please try again.');
+      }
+    }
+  };
+
   const handleBack = () => {
     if (step === 'metrics') {
       setStep('player');
@@ -96,6 +123,7 @@ export const NewGame: React.FC = () => {
             player={selectedPlayer}
             selectedMetrics={selectedMetrics}
             onGameEnd={handleEndGame}
+            onEditMetrics={handleEditMetrics}
           />
         </div>
       </div>
@@ -283,13 +311,23 @@ export const NewGame: React.FC = () => {
                 >
                   Back
                 </button>
-                <button
-                  onClick={handleStartGame}
-                  disabled={selectedMetrics.length === 0}
-                  className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Start Game
-                </button>
+                {currentGameId ? (
+                  <button
+                    onClick={() => handleMetricsUpdated(selectedMetrics)}
+                    disabled={selectedMetrics.length === 0}
+                    className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Update Metrics
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStartGame}
+                    disabled={selectedMetrics.length === 0}
+                    className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Start Game
+                  </button>
+                )}
               </div>
             </div>
           )}

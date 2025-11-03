@@ -29,6 +29,7 @@
 
 **Remaining Work:**
 
+- Remove MetricActions table and related code (table is redundant since we use `requiredActions` array in Metrics table)
 - Implement NewGame page (player selection, opponent input, metric selection)
 - Implement GameTracker component (action buttons, real-time metric calculations)
 - Implement History page (game list with filtering)
@@ -453,6 +454,7 @@ Example: "vs Manchester United - 10/26/2025"
 - [x] **Add CRUD operations for GameMetrics and MetricActions in useDB hook**
 - [x] **Add dependency resolution functions (resolveMetricDependencies, getRequiredActionsForMetrics)**
 - [x] **Add automatic MetricActions table population based on Metrics.md associations**
+- [ ] **Remove MetricActions table and related code (redundant - using requiredActions array in Metrics table)**
 - [ ] **Implement NewGame page (player selection, opponent input, metric selection)**
 - [ ] **Implement GameTracker component with dependency resolution**
 - [ ] **Implement History page (game list with filtering)**

@@ -9,25 +9,133 @@ export const useDB = () => {
   useEffect(() => {
     const initializeDB = async () => {
       try {
-        // Check if actions exist, if not seed them
+        // Check if actions exist, if not seed them with fixed IDs
         const actionCount = await db.actions.count();
+        const expectedActionCount = initialActions.length;
+        
         if (actionCount === 0) {
-          await db.actions.bulkAdd(initialActions);
+          // Seed actions with fixed IDs (1-based)
+          const actionsWithIds = initialActions.map((action, index) => ({
+            ...action,
+            id: index + 1
+          }));
+          await db.actions.bulkAdd(actionsWithIds as any);
+          console.log(`Seeded ${actionsWithIds.length} actions with fixed IDs`);
+        } else if (actionCount !== expectedActionCount) {
+          // Clear and re-seed with fixed IDs if count doesn't match
+          console.warn(`Action count mismatch: expected ${expectedActionCount}, found ${actionCount}. Clearing and re-seeding actions.`);
+          await db.actions.clear();
+          const actionsWithIds = initialActions.map((action, index) => ({
+            ...action,
+            id: index + 1
+          }));
+          await db.actions.bulkAdd(actionsWithIds as any);
+        } else {
+          // Verify action IDs and colors are correct, fix if needed
+          const existingActions = await db.actions.orderBy('id').toArray();
+          const needsReseed = existingActions.length !== expectedActionCount || 
+            existingActions.some((action, index) => action.id !== index + 1 || action.name !== initialActions[index].name);
+          
+          if (needsReseed) {
+            console.warn('Action IDs or names mismatch. Re-seeding actions with fixed IDs.');
+            await db.actions.clear();
+            const actionsWithIds = initialActions.map((action, index) => ({
+              ...action,
+              id: index + 1
+            }));
+            await db.actions.bulkAdd(actionsWithIds as any);
+          } else {
+            // Update existing actions to include color field if missing or incorrect
+            for (let i = 0; i < existingActions.length && i < initialActions.length; i++) {
+              const existingAction = existingActions[i];
+              const seedAction = initialActions[i];
+              if (existingAction && existingAction.id && seedAction.color) {
+                // Update color if it doesn't match or is missing
+                if (!existingAction.color || existingAction.color !== seedAction.color) {
+                  await db.actions.update(existingAction.id, { color: seedAction.color });
+                  console.log(`Updated action "${existingAction.name}" color from ${existingAction.color || 'none'} to ${seedAction.color}`);
+                }
+              }
+            }
+          }
         }
 
+        // Get all actions to build name-to-ID mapping
+        const dbActions = await db.actions.toArray();
+        console.log(`Retrieved ${dbActions.length} actions from database (expected ${initialActions.length})`);
+        const actionNameToId: { [name: string]: number } = {};
+        dbActions.forEach(action => {
+          if (action.id) {
+            actionNameToId[action.name] = action.id;
+          }
+        });
+        const actionNames = initialActions.map(a => a.name);
+        
+        // Verify all actions are mapped
+        const missingActions = initialActions.filter(a => !actionNameToId[a.name]);
+        if (missingActions.length > 0) {
+          console.error(`Missing action mappings (${missingActions.length}):`, missingActions.map(a => a.name));
+        }
+        console.log(`Full action name to ID mapping (${Object.keys(actionNameToId).length} actions):`, actionNameToId);
+        
         // Check if metrics exist, if not seed them
         const metricCount = await db.metrics.count();
         if (metricCount === 0) {
-          await db.metrics.bulkAdd(initialMetrics);
+          // Map seed metrics to use actual action IDs
+          const metricsToAdd = initialMetrics.map(seedMetric => {
+            if (seedMetric.requiredActions) {
+              // Map action IDs from seed (positional) to actual database IDs by name
+              const mappedActionIds: number[] = [];
+              
+              for (const actionIndex of seedMetric.requiredActions) {
+                // actionIndex is 1-based in seed data, but array is 0-based
+                const actionName = actionNames[actionIndex - 1];
+                const actualActionId = actionNameToId[actionName];
+                if (actualActionId) {
+                  mappedActionIds.push(actualActionId);
+                } else {
+                  console.warn(`Could not find action ID for: ${actionName} (index ${actionIndex}) in seed metric "${seedMetric.name}"`);
+                }
+              }
+              
+              return {
+                ...seedMetric,
+                requiredActions: mappedActionIds
+              };
+            }
+            return seedMetric;
+          });
+          
+          await db.metrics.bulkAdd(metricsToAdd);
         } else {
           // Update existing metrics to match seed data (sync requiredActions from Metrics.md)
           const existingMetrics = await db.metrics.toArray();
+          
+          console.log('Action name to ID mapping:', actionNameToId);
+          console.log('Action names array:', actionNames);
+          
           for (const seedMetric of initialMetrics) {
             const existingMetric = existingMetrics.find(m => m.name === seedMetric.name);
             if (existingMetric && existingMetric.id && seedMetric.requiredActions) {
-              // Update requiredActions to match Metrics.md associations
+              // Map action IDs from seed (positional) to actual database IDs by name
+              const mappedActionIds: number[] = [];
+              
+              for (const actionIndex of seedMetric.requiredActions) {
+                // actionIndex is 1-based in seed data, but array is 0-based
+                const actionName = actionNames[actionIndex - 1];
+                const actualActionId = actionNameToId[actionName];
+                if (actualActionId) {
+                  mappedActionIds.push(actualActionId);
+                } else {
+                  console.warn(`Could not find action ID for: ${actionName} (index ${actionIndex})`);
+                }
+              }
+              
+              console.log(`Updating metric "${seedMetric.name}" (ID: ${existingMetric.id}) requiredActions from [${existingMetric.requiredActions}] to [${mappedActionIds}]`);
+              
+              // Update requiredActions to match Metrics.md associations with actual IDs
               await db.metrics.update(existingMetric.id, {
-                requiredActions: seedMetric.requiredActions,
+                requiredActions: mappedActionIds,
                 metricFormula: seedMetric.metricFormula
               });
             }

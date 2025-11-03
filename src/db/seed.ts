@@ -2,27 +2,27 @@ import type { Action, Metric } from '../types';
 
 export const initialActions: Omit<Action, 'id'>[] = [
   // Shooting
-  { name: 'Shot on Target', description: 'Shot that hits the target/goal', category: 'Shooting' },
-  { name: 'Shot off Target', description: 'Shot that misses the target/goal', category: 'Shooting' },
+  { name: 'Shot on Target', description: 'Shot that hits the target/goal', category: 'Shooting', color: 'green' },
+  { name: 'Shot off Target', description: 'Shot that misses the target/goal', category: 'Shooting', color: 'light red' },
   
   // Dribbling
-  { name: 'Successful Dribble', description: 'Successfully dribbled past an opponent', category: 'Dribbling' },
-  { name: 'Unsuccessful Dribble', description: 'Failed to dribble past an opponent', category: 'Dribbling' },
+  { name: 'Successful Dribble', description: 'Successfully dribbled past an opponent', category: 'Dribbling', color: 'light green' },
+  { name: 'Unsuccessful Dribble', description: 'Failed to dribble past an opponent', category: 'Dribbling', color: 'light red' },
   
   // Passing
-  { name: 'Complete Pass', description: 'Successfully completed pass to teammate', category: 'Passing' },
-  { name: 'Incomplete Pass', description: 'Pass that was intercepted or missed', category: 'Passing' },
-  { name: 'Pass Forward', description: 'Forward pass to advance the ball', category: 'Passing' },
-  { name: 'Line-breaking Pass', description: 'Pass that breaks through defensive lines', category: 'Passing' },
+  { name: 'Complete Pass', description: 'Successfully completed pass to teammate', category: 'Passing', color: 'light green' },
+  { name: 'Incomplete Pass', description: 'Pass that was intercepted or missed', category: 'Passing', color: 'light red' },
+  { name: 'Pass Forward', description: 'Forward pass to advance the ball', category: 'Passing', color: 'light green' },
+  { name: 'Line-breaking Pass', description: 'Pass that breaks through defensive lines', category: 'Passing', color: 'green' },
   
   // Defending
-  { name: 'Successful Tackle', description: 'Successfully won the ball from opponent', category: 'Defending' },
-  { name: 'Missed Tackle', description: 'Failed attempt to win the ball', category: 'Defending' },
-  { name: 'Successful Interception', description: 'Successfully intercepted opponent pass', category: 'Defending' },
+  { name: 'Successful Tackle', description: 'Successfully won the ball from opponent', category: 'Defending', color: 'green' },
+  { name: 'Missed Tackle', description: 'Failed attempt to win the ball', category: 'Defending', color: 'light red' },
+  { name: 'Successful Interception', description: 'Successfully intercepted opponent pass', category: 'Defending', color: 'green' },
   
   // Possession
-  { name: 'Progressive Carry', description: 'Carried ball forward into advanced position', category: 'Possession' },
-  { name: 'Cross into the Box', description: 'Crossed ball into the penalty area', category: 'Possession' }
+  { name: 'Progressive Carry', description: 'Carried ball forward into advanced position', category: 'Possession', color: 'light green' },
+  { name: 'Cross into the Box', description: 'Crossed ball into the penalty area', category: 'Possession', color: 'light green' }
 ];
 
 export const initialMetrics: Omit<Metric, 'id'>[] = [
@@ -41,7 +41,7 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
     metricFormula: 'Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass',
     category: 'Passing',
     dependsOn: [],
-    requiredActions: [3, 4, 5, 6], // Complete Pass, Incomplete Pass, Pass Forward, Line-breaking Pass
+    requiredActions: [5, 6, 7, 8], // Complete Pass (index 4+1=5), Incomplete Pass (index 5+1=6), Pass Forward (index 6+1=7), Line-breaking Pass (index 7+1=8)
     calculationType: 'sum'
   },
   {
@@ -50,7 +50,7 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
     metricFormula: '(Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes',
     category: 'Passing',
     dependsOn: [2], // Depends on Total Passes (metric ID 2)
-    requiredActions: [3, 5, 6], // Complete Pass, Pass Forward, Line-breaking Pass
+    requiredActions: [5, 6, 7, 8], // Complete Pass (5), Incomplete Pass (6), Pass Forward (7), Line-breaking Pass (8) - includes all actions from Total Passes dependency
     calculationType: 'percentage'
   },
   {
@@ -59,7 +59,7 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
     metricFormula: 'Successful Dribble / (Successful Dribble + Unsuccessful Dribble)',
     category: 'Dribbling',
     dependsOn: [],
-    requiredActions: [7, 8], // Successful Dribble, Unsuccessful Dribble
+    requiredActions: [3, 4], // Successful Dribble (index 2+1=3), Unsuccessful Dribble (index 3+1=4)
     calculationType: 'percentage'
   },
   {
@@ -68,16 +68,16 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
     metricFormula: 'Successful Tackle / (Successful Tackle + Missed Tackle)',
     category: 'Defending',
     dependsOn: [],
-    requiredActions: [9, 10], // Successful Tackle, Missed Tackle
+    requiredActions: [9, 10], // Successful Tackle (index 8+1=9), Missed Tackle (index 9+1=10)
     calculationType: 'percentage'
   },
   {
     name: 'Possession',
     description: 'Total possession actions',
-    metricFormula: 'Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble',
+    metricFormula: 'Complete Pass + Incomplete Pass + Successful Dribble + Unsuccessful Dribble',
     category: 'Possession',
     dependsOn: [],
-    requiredActions: [3, 4, 5, 6, 7, 8], // Complete Pass, Incomplete Pass, Pass Forward, Line-breaking Pass, Successful Dribble, Unsuccessful Dribble
+    requiredActions: [5, 6, 3, 4], // Complete Pass (5), Incomplete Pass (6), Successful Dribble (3), Unsuccessful Dribble (4)
     calculationType: 'sum'
   }
 ];

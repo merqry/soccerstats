@@ -8,20 +8,23 @@ interface GameTrackerProps {
   player: Player;
   selectedMetrics?: number[]; // Optional, will load from GameMetrics if not provided
   onGameEnd: () => void;
+  onEditMetrics?: () => void; // Optional callback to edit metrics
 }
 
 export const GameTracker: React.FC<GameTrackerProps> = ({
   gameId,
   player,
   selectedMetrics,
-  onGameEnd
+  onGameEnd,
+  onEditMetrics
 }) => {
   const { 
     getActions, 
     getGameActions, 
     getGameMetrics,
     getRequiredActionsForMetrics,
-    incrementGameAction, 
+    incrementGameAction,
+    updateGameAction,
     calculateMetrics,
     updateGame,
     isReady 
@@ -33,6 +36,7 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
   const [showMetrics, setShowMetrics] = useState(false);
   const [selectedMetricIds, setSelectedMetricIds] = useState<number[]>(selectedMetrics || []);
   const [relevantActionIds, setRelevantActionIds] = useState<number[]>([]);
+  const [actionHistory, setActionHistory] = useState<{ actionId: number; previousCount: number }[]>([]);
 
   // Update selectedMetricIds when selectedMetrics prop changes
   useEffect(() => {
@@ -86,8 +90,31 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
   };
 
   const handleIncrement = async (actionId: number) => {
+    const previousCount = gameActions[actionId] || 0;
     await incrementGameAction(gameId, actionId);
+    // Save to history for undo
+    setActionHistory(prev => [...prev, { actionId, previousCount }]);
     await loadGameActions(); // Reload to get updated counts
+  };
+
+  const handleDecrement = async (actionId: number) => {
+    const currentCount = gameActions[actionId] || 0;
+    if (currentCount > 0) {
+      const previousCount = currentCount;
+      await updateGameAction(gameId, actionId, currentCount - 1);
+      // Save to history for undo
+      setActionHistory(prev => [...prev, { actionId, previousCount }]);
+      await loadGameActions();
+    }
+  };
+
+  const handleUndo = async () => {
+    if (actionHistory.length > 0) {
+      const lastAction = actionHistory[actionHistory.length - 1];
+      await updateGameAction(gameId, lastAction.actionId, lastAction.previousCount);
+      setActionHistory(prev => prev.slice(0, -1));
+      await loadGameActions();
+    }
   };
 
   // Get actions that are relevant to selected metrics using getRequiredActionsForMetrics
@@ -95,6 +122,9 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
     if (selectedMetricIds.length > 0 && isReady && actions.length > 0) {
       getRequiredActionsForMetrics(selectedMetricIds)
         .then(actionIds => {
+          console.log('Selected metric IDs:', selectedMetricIds);
+          console.log('Required action IDs:', actionIds);
+          console.log('Available actions:', actions.map(a => ({ id: a.id, name: a.name })));
           setRelevantActionIds(actionIds);
         })
         .catch(error => {
@@ -106,18 +136,32 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
     }
   }, [selectedMetricIds, isReady, actions.length]);
 
+  // Define color order for sorting
+  const getColorOrder = (color?: 'green' | 'light green' | 'light red' | 'red'): number => {
+    switch (color) {
+      case 'green': return 1;
+      case 'light green': return 2;
+      case 'light red': return 3;
+      case 'red': return 4;
+      default: return 5;
+    }
+  };
+
   const getRelevantActions = () => {
-    return actions.filter(action => relevantActionIds.includes(action.id!));
+    // Filter and sort actions to ensure consistent order
+    const filtered = actions.filter(action => relevantActionIds.includes(action.id!));
+    // Sort by color (green → light green → light red → red), then by name
+    return filtered.sort((a, b) => {
+      const colorOrderA = getColorOrder(a.color);
+      const colorOrderB = getColorOrder(b.color);
+      if (colorOrderA !== colorOrderB) {
+        return colorOrderA - colorOrderB;
+      }
+      return a.name.localeCompare(b.name);
+    });
   };
 
   const relevantActions = getRelevantActions();
-  const actionsByCategory = relevantActions.reduce((acc, action) => {
-    if (!acc[action.category]) {
-      acc[action.category] = [];
-    }
-    acc[action.category].push(action);
-    return acc;
-  }, {} as { [category: string]: Action[] });
 
   if (!isReady) {
     return (
@@ -131,9 +175,9 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
       {/* Player Info */}
-      <div className="card">
+      <div className="card py-2">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-800">
@@ -143,77 +187,122 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
               {player.position} • {player.teamName}
             </p>
           </div>
-          <button
-            onClick={() => setShowMetrics(!showMetrics)}
-            className="btn-secondary"
-          >
-            {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
-          </button>
+          <div className="flex gap-2">
+            {onEditMetrics && (
+              <button
+                onClick={onEditMetrics}
+                className="btn-secondary"
+              >
+                Edit Metrics
+              </button>
+            )}
+            <button
+              onClick={() => setShowMetrics(!showMetrics)}
+              className="btn-secondary"
+            >
+              {showMetrics ? 'Show Tracking' : 'Show Metrics'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Metrics Display */}
-      {showMetrics && metrics.length > 0 && (
-        <div className="card">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Live Metrics</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {metrics.map(metric => (
-              <div key={metric.metricId} className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-sm text-gray-600">{metric.metricName}</div>
-                <div className="text-xl font-bold text-primary-600">
-                  {typeof metric.value === 'number' && metric.value % 1 !== 0 
-                    ? `${metric.value.toFixed(1)}%` 
-                    : metric.value}
+      {/* Metrics Display - Shown when showMetrics is true */}
+      {showMetrics && (
+        <div className="card py-2">
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Live Metrics</h3>
+          {metrics.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4">
+              {metrics.map(metric => (
+                <div key={metric.metricId} className="bg-gray-50 p-4 rounded-lg border-2 border-gray-200">
+                  <div className="text-sm text-gray-600 mb-2">{metric.metricName}</div>
+                  <div className="text-2xl font-bold text-primary-600">
+                    {typeof metric.value === 'number' && metric.value % 1 !== 0 
+                      ? `${metric.value.toFixed(1)}%` 
+                      : typeof metric.value === 'number'
+                      ? metric.value.toString()
+                      : metric.value}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-600">No metrics calculated yet. Record some actions to see metrics.</p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Action Buttons */}
-      {Object.keys(actionsByCategory).length > 0 ? (
-        <div className="space-y-6">
-          {Object.entries(actionsByCategory).map(([category, categoryActions]) => (
-            <div key={category} className="card">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">{category}</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {categoryActions.map(action => (
-                  <StatButton
-                    key={action.id}
-                    label={action.name}
-                    count={gameActions[action.id!] || 0}
-                    onIncrement={() => handleIncrement(action.id!)}
-                  />
-                ))}
+      {/* Action Buttons Grid - Shown when showMetrics is false */}
+      {!showMetrics && (
+        <>
+          {relevantActions.length > 0 ? (
+            <div className="px-2 py-1">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {relevantActions.map(action => {
+                  console.log(`Action: ${action.name}, Color: ${action.color}`);
+                  return (
+                    <StatButton
+                      key={action.id}
+                      label={action.name}
+                      count={gameActions[action.id!] || 0}
+                      onIncrement={() => handleIncrement(action.id!)}
+                      color={action.color}
+                    />
+                  );
+                })}
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="card">
-          <div className="text-center py-8">
-            <p className="text-gray-600">Loading action buttons...</p>
-            {selectedMetricIds.length === 0 && (
-              <p className="text-sm text-gray-500 mt-2">No metrics selected or metrics are loading</p>
-            )}
-          </div>
-        </div>
-      )}
+          ) : (
+            <div className="card">
+              <div className="text-center py-8">
+                <p className="text-gray-600">Loading action buttons...</p>
+                {selectedMetricIds.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-2">No metrics selected or metrics are loading</p>
+                )}
+              </div>
+            </div>
+          )}
 
-      {/* End Game Button */}
-      <div className="card">
-        <button
-          onClick={async () => {
-            // Update game status to 'completed'
-            await updateGame(gameId, { status: 'completed' });
-            onGameEnd();
-          }}
-          className="btn-primary w-full py-3 text-lg"
-        >
-          End Game
-        </button>
-      </div>
+          {/* Utility Buttons - Only shown when tracking is visible */}
+          <div className="px-2 py-1">
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={handleUndo}
+                disabled={actionHistory.length === 0}
+                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1 rounded text-xs font-medium"
+              >
+                ↶ Undo
+              </button>
+              <button
+                onClick={async () => {
+                  // Reset all counts to 0
+                  if (confirm('Start over? This will reset all action counts to 0.')) {
+                    for (const actionId of relevantActionIds) {
+                      await updateGameAction(gameId, actionId, 0);
+                    }
+                    setActionHistory([]);
+                    await loadGameActions();
+                  }
+                }}
+                className="btn-secondary px-2 py-1 rounded text-xs font-medium"
+              >
+                ↻ Reset
+              </button>
+              <button
+                onClick={async () => {
+                  // Update game status to 'completed'
+                  await updateGame(gameId, { status: 'completed' });
+                  onGameEnd();
+                }}
+                className="btn-primary px-2 py-1 rounded text-xs font-medium"
+              >
+                ✓ End Game
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
