@@ -19,6 +19,42 @@ export const useDB = () => {
         const metricCount = await db.metrics.count();
         if (metricCount === 0) {
           await db.metrics.bulkAdd(initialMetrics);
+        } else {
+          // Update existing metrics to match seed data (sync requiredActions from Metrics.md)
+          const existingMetrics = await db.metrics.toArray();
+          for (const seedMetric of initialMetrics) {
+            const existingMetric = existingMetrics.find(m => m.name === seedMetric.name);
+            if (existingMetric && existingMetric.id && seedMetric.requiredActions) {
+              // Update requiredActions to match Metrics.md associations
+              await db.metrics.update(existingMetric.id, {
+                requiredActions: seedMetric.requiredActions,
+                metricFormula: seedMetric.metricFormula
+              });
+            }
+          }
+        }
+        
+        // Populate MetricActions table based on metric.requiredActions from Metrics.md
+        // Clear existing data to ensure it matches the current seed data
+        await db.metricActions.clear();
+        const allMetrics = await db.metrics.toArray();
+        const metricActions: Omit<MetricAction, 'id'>[] = [];
+        
+        for (const metric of allMetrics) {
+          if (metric.id && metric.requiredActions) {
+            for (const actionId of metric.requiredActions) {
+              metricActions.push({ metricId: metric.id, actionId });
+            }
+          }
+        }
+        
+        if (metricActions.length > 0) {
+          try {
+            await db.metricActions.bulkAdd(metricActions);
+            console.log(`Populated MetricActions table with ${metricActions.length} records based on Metrics.md associations`);
+          } catch (error) {
+            console.error('Error populating MetricActions:', error);
+          }
         }
 
         setIsReady(true);
@@ -57,8 +93,12 @@ export const useDB = () => {
     return await db.games.orderBy('timestamp').reverse().toArray();
   };
 
-  const getGamesByPlayer = async (playerId: number) => {
-    return await db.games.where('playerId').equals(playerId).reverse().sortBy('timestamp');
+  const getGamesByPlayer = async (playerId: number, status?: 'in_progress' | 'completed') => {
+    let query = db.games.where('playerId').equals(playerId);
+    if (status) {
+      query = query.filter(game => game.status === status);
+    }
+    return await query.reverse().sortBy('timestamp');
   };
 
   const updateGame = async (id: number, updates: Partial<Game>) => {

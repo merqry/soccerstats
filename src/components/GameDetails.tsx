@@ -12,7 +12,9 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
     getGames, 
     getPlayers, 
     getActions, 
-    getGameActions, 
+    getGameActions,
+    getGameMetrics,
+    deleteGame,
     calculateMetrics,
     isReady 
   } = useDB();
@@ -22,6 +24,7 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
   const [actions, setActions] = useState<Action[]>([]);
   const [gameActions, setGameActions] = useState<{ [actionId: number]: number }>({});
   const [metrics, setMetrics] = useState<MetricCalculation[]>([]);
+  const [selectedMetricIds, setSelectedMetricIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (isReady) {
@@ -49,7 +52,13 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
         actionCounts[action.actionId] = action.count;
       });
 
-      const calculatedMetrics = await calculateMetrics(gameId);
+      // Load selected metrics from GameMetrics table
+      const gameMetrics = await getGameMetrics(gameId);
+      const metricIds = gameMetrics.map(gm => gm.metricId);
+      setSelectedMetricIds(metricIds);
+
+      // Calculate metrics using selected metric IDs
+      const calculatedMetrics = await calculateMetrics(gameId, metricIds);
 
       setGame(currentGame);
       setPlayer(currentPlayer);
@@ -130,6 +139,19 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
               <p className="text-sm text-gray-700"><strong>Notes:</strong> {game.notes}</p>
             </div>
           )}
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={async () => {
+                if (confirm('Are you sure you want to delete this game? This action cannot be undone.')) {
+                  await deleteGame(gameId);
+                  onBack();
+                }
+              }}
+              className="btn-secondary text-red-600 hover:bg-red-50"
+            >
+              Delete Game
+            </button>
+          </div>
         </div>
       </div>
 

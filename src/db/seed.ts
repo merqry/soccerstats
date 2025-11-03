@@ -50,7 +50,7 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
     metricFormula: '(Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes',
     category: 'Passing',
     dependsOn: [2], // Depends on Total Passes (metric ID 2)
-    requiredActions: [3, 4, 5, 6], // Same actions as Total Passes
+    requiredActions: [3, 5, 6], // Complete Pass, Pass Forward, Line-breaking Pass
     calculationType: 'percentage'
   },
   {
@@ -74,10 +74,10 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
   {
     name: 'Possession',
     description: 'Total possession actions',
-    metricFormula: 'Complete Pass + Incomplete Pass + Successful Dribble + Unsuccessful Dribble',
+    metricFormula: 'Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble',
     category: 'Possession',
     dependsOn: [],
-    requiredActions: [3, 4, 7, 8], // Complete Pass, Incomplete Pass, Successful Dribble, Unsuccessful Dribble
+    requiredActions: [3, 4, 5, 6, 7, 8], // Complete Pass, Incomplete Pass, Pass Forward, Line-breaking Pass, Successful Dribble, Unsuccessful Dribble
     calculationType: 'sum'
   }
 ];

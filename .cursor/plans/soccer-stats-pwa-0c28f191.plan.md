@@ -75,33 +75,35 @@
 │ GameActions  │      │  GameMetrics   │
 │──────────────│      │────────────────│
 │ id (PK)      │      │ id (PK)        │
-│ gameId (FK)  │      │ gameId (FK)   │
-│ actionId (FK)│      │ metricId (FK) │
+│ gameId (FK)  │      │ gameId (FK)    │
+│ actionId (FK)│      │ metricId (FK)  │
 │ count        │      └───────┬────────┘
 │ timestamp    │              │ N
 └──────┬───────┘              │
        │ N                    │ 1
        │                      │
-       │ 1              ┌─────▼──────┐
-┌──────▼──────┐         │  Metrics   │
-│   Actions   │         │────────────│
-│─────────────│         │ id (PK)    │
-│ id (PK)     │         │ name       │
-│ name        │         │ description│
-│ description │         │ formula    │
-│ category    │         │ category   │
-└──────┬──────┘         │ dependsOn │
-       │ 1              └──────┬─────┘
+       │ 1              ┌─────▼──────────┐
+┌──────▼──────┐         │  Metrics       │
+│   Actions   │         │────────────────│
+│─────────────│         │ id (PK)        │
+│ id (PK)     │         │ name           │
+│ name        │         │ description    │
+│ description │         │ metricFormula  │
+│ category    │         │ category       │
+└──────┬──────┘         │ dependsOn      │
+       │ 1              │ requiredActions│
+       │ N              │ calculationType│
+       │                └──────┬─────────┘
        │                       │ 1
        │ N                     │ N
        │                       │
 ┌──────▼───────────────────────▼──────┐
 │         MetricActions               │ ← NEW TABLE
-│────────────────────────────────────│
+│─────────────────────────────────────│
 │ id (PK)                             │
 │ metricId (FK)                       │
 │ actionId (FK)                       │
-└────────────────────────────────────┘
+└─────────────────────────────────────┘
 ```
 
 ### Schema Changes Required
@@ -120,6 +122,8 @@
 - Fields: `id`, `metricId`, `actionId`
 - Status: Implemented in `src/types/index.ts` and `src/db/database.ts`
 - Operations: Added CRUD functions in `src/hooks/useDB.ts`
+- **Initialization**: Automatically populated during database initialization based on `metric.requiredActions` from `src/db/seed.ts`
+- **Sync Logic**: On app startup, existing metrics are synced with seed data to ensure `requiredActions` match Metrics.md, then MetricActions table is cleared and repopulated
 
 **Updated Game Interface:** ✅ COMPLETED
 
@@ -159,6 +163,21 @@
 3. ✅ Confirmed `status` field exists in `Game` interface (optional field)
 4. ✅ Confirmed `dependsOn` field exists in `Metric` interface (optional field)
 5. ✅ Updated Dexie schema to version 2 with `gameMetrics` and `metricActions` tables
+
+   **Schema definition in `src/db/database.ts`:**
+   ```typescript
+   this.version(2).stores({
+     players: '++id, name, position, teamName, createdAt',
+     games: '++id, playerId, opponent, gameDate, title, timestamp, notes, status',
+     actions: '++id, name, description, category',
+     metrics: '++id, name, description, metricFormula, category, dependsOn, requiredActions, calculationType',
+     gameActions: '++id, gameId, actionId, count, timestamp',
+     gameMetrics: '++id, gameId, metricId',
+     metricActions: '++id, metricId, actionId'
+   });
+   ```
+   
+   Note: The `metrics` table includes `requiredActions` as an indexed field, which is used to populate the `metricActions` junction table.
 6. ✅ Added CRUD operations for GameMetrics in useDB hook:
 
    - `addGameMetrics(gameId, metricIds)`
@@ -171,6 +190,12 @@
    - `getMetricActions(metricId)`
    - `getActionMetrics(actionId)`
    - `deleteMetricActions(metricId)`
+
+8. ✅ Added automatic MetricActions table population logic in `initializeDB()`:
+   - Syncs existing metrics with seed data (updates `requiredActions` and `metricFormula` to match Metrics.md)
+   - Clears existing MetricActions table
+   - Repopulates MetricActions table based on `metric.requiredActions` from all metrics
+   - Ensures MetricActions table always reflects associations defined in Metrics.md
 
 ### 1. New Game Page
 
@@ -261,6 +286,10 @@ Add routes:
 **Recent improvements:**
 
 - ✅ `deleteGame(gameId)` - Updated to cascade delete GameMetrics (already cascaded GameActions)
+- ✅ `initializeDB()` - Added automatic MetricActions table population:
+  - On app startup, syncs existing metrics with seed data (updates `requiredActions` and `metricFormula`)
+  - Clears and repopulates MetricActions table based on `metric.requiredActions` from all metrics
+  - Ensures MetricActions table always matches associations defined in Metrics.md
 
 ## Formula Storage System
 
@@ -325,6 +354,7 @@ The `evaluateQuery()` function:
 1. Each metric has a `query` field stored in the database (IndexedDB via Dexie.js)
 2. The query is a JavaScript expression string (e.g., `"action[1] / (action[1] + action[2]) * 100"`)
 3. At runtime, when calculating metrics:
+
    - The query string is retrieved from the database
    - Placeholders like `action[1]` and `metric[2]` are replaced with actual values
    - The resulting expression is evaluated safely using JavaScript's `Function` constructor
@@ -335,11 +365,13 @@ The `evaluateQuery()` function:
 1. Add `query: string` field to Metric interface
 2. Update database schema to include query field in metrics table
 3. Create query evaluator function (`evaluateQuery`) that:
+
    - Takes query string, action counts, and calculated metric values
    - Replaces `action[id]` placeholders with actual action counts
    - Replaces `metric[id]` placeholders with calculated metric values
    - Safely evaluates the JavaScript expression
    - Returns the numeric result
+
 4. Update `calculateMetrics` function to use queries instead of hardcoded if/else logic
 5. Update seed data with query strings for all metrics
 6. Maintain backward compatibility with fallback logic for metrics without queries
@@ -370,50 +402,31 @@ The `evaluateQuery()` function:
 5. ✅ Return calculated values with proper formatting
 
 ### - Tracked actions: 
-
 Shot on Target,
-
 Shot off Target,
-
 Successful Dribble,
-
 Unsuccessful Dribble,
-
 Complete Pass,
-
 Incomplete Pass,
-
 Pass Forward,
-
 Line-breaking Pass,
-
 Successful Tackle,
-
 Missed Tackle,
-
 Successful Interception,
-
 Progressive Carry,
-
 Cross into the Box
 
 ### Calculated metrics: 
 
 Shots on Target = Shots on Target / (Shot on Target + Shot off Target)
-
 Total Passes = (Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass)
-
 Pass Completion Rate = (Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes
-
 Dribble Success Rate = Successful Dribble / (Successful Dribble + Unsuccessful Dribble)
-
 Successful Tackle Rate = Successful Tackle / (Successful Tackle + Missed Tackle)
-
 Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble
 
 ### Data Flow
-
-1. User selects metrics → App determines required actions
+1. User selects metrics → App determines required actions based on the MetricActions junction table
 2. User taps action buttons → Counts increment in state
 3. On each action → Recalculate all metrics
 4. On "End Game" → Save all GameAction records to database
@@ -439,6 +452,7 @@ Example: "vs Manchester United - 10/26/2025"
 - [x] **Update database migration to version 2**
 - [x] **Add CRUD operations for GameMetrics and MetricActions in useDB hook**
 - [x] **Add dependency resolution functions (resolveMetricDependencies, getRequiredActionsForMetrics)**
+- [x] **Add automatic MetricActions table population based on Metrics.md associations**
 - [ ] **Implement NewGame page (player selection, opponent input, metric selection)**
 - [ ] **Implement GameTracker component with dependency resolution**
 - [ ] **Implement History page (game list with filtering)**

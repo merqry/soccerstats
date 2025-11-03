@@ -7,7 +7,7 @@ import { GameTracker } from '../components/GameTracker';
 
 export const NewGame: React.FC = () => {
   const navigate = useNavigate();
-  const { getPlayers, addGame, isReady } = useDB();
+  const { getPlayers, addGame, addGameMetrics, isReady } = useDB();
   
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -36,16 +36,25 @@ export const NewGame: React.FC = () => {
     }
 
     try {
-      const gameTitle = `${selectedPlayer.name} vs ${opponent} - ${new Date(gameDate).toLocaleDateString()}`;
+      // Format title as "vs [Opponent] - [Date]"
+      const dateStr = new Date(gameDate).toLocaleDateString();
+      const gameTitle = `vs ${opponent.trim()} - ${dateStr}`;
       
+      // Create game with status 'in_progress'
       const gameId = await addGame({
         playerId: selectedPlayer.id!,
         opponent: opponent.trim(),
         gameDate: new Date(gameDate),
         title: gameTitle,
         timestamp: new Date(),
-        notes: notes.trim() || undefined
+        notes: notes.trim() || undefined,
+        status: 'in_progress'
       });
+
+      // Save selected metrics to GameMetrics table
+      if (gameId) {
+        await addGameMetrics(gameId as number, selectedMetrics);
+      }
 
       setCurrentGameId(gameId as number);
       setStep('tracking');

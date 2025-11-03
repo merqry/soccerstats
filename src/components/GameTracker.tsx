@@ -6,7 +6,7 @@ import { StatButton } from './StatButton';
 interface GameTrackerProps {
   gameId: number;
   player: Player;
-  selectedMetrics: number[];
+  selectedMetrics?: number[]; // Optional, will load from GameMetrics if not provided
   onGameEnd: () => void;
 }
 
@@ -19,8 +19,11 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
   const { 
     getActions, 
     getGameActions, 
+    getGameMetrics,
+    getRequiredActionsForMetrics,
     incrementGameAction, 
     calculateMetrics,
+    updateGame,
     isReady 
   } = useDB();
   
@@ -28,19 +31,45 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
   const [gameActions, setGameActions] = useState<{ [actionId: number]: number }>({});
   const [metrics, setMetrics] = useState<MetricCalculation[]>([]);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [selectedMetricIds, setSelectedMetricIds] = useState<number[]>(selectedMetrics || []);
+  const [relevantActionIds, setRelevantActionIds] = useState<number[]>([]);
+
+  // Update selectedMetricIds when selectedMetrics prop changes
+  useEffect(() => {
+    if (selectedMetrics && selectedMetrics.length > 0) {
+      setSelectedMetricIds(selectedMetrics);
+    }
+  }, [selectedMetrics]);
 
   useEffect(() => {
     if (isReady) {
       loadActions();
       loadGameActions();
+      
+      // If selectedMetrics not provided, load from GameMetrics table
+      if (!selectedMetrics || selectedMetrics.length === 0) {
+        loadSelectedMetrics();
+      }
     }
   }, [isReady, gameId]);
 
-  useEffect(() => {
-    if (Object.keys(gameActions).length > 0) {
-      calculateMetrics(gameId).then(setMetrics);
+  const loadSelectedMetrics = async () => {
+    try {
+      const gameMetrics = await getGameMetrics(gameId);
+      const metricIds = gameMetrics.map(gm => gm.metricId);
+      if (metricIds.length > 0) {
+        setSelectedMetricIds(metricIds);
+      }
+    } catch (error) {
+      console.error('Error loading selected metrics:', error);
     }
-  }, [gameActions, gameId, calculateMetrics]);
+  };
+
+  useEffect(() => {
+    if (Object.keys(gameActions).length > 0 && selectedMetricIds.length > 0) {
+      calculateMetrics(gameId, selectedMetricIds).then(setMetrics);
+    }
+  }, [gameActions, gameId, selectedMetricIds, calculateMetrics]);
 
   const loadActions = async () => {
     const allActions = await getActions();
@@ -61,43 +90,24 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
     await loadGameActions(); // Reload to get updated counts
   };
 
-  // Get actions that are relevant to selected metrics
-  const getRelevantActions = () => {
-    const relevantActionNames = new Set<string>();
-    
-    // Add actions based on selected metrics
-    if (selectedMetrics.includes(1)) { // Shots on Target %
-      relevantActionNames.add('Shot on Target');
-      relevantActionNames.add('Shot off Target');
+  // Get actions that are relevant to selected metrics using getRequiredActionsForMetrics
+  useEffect(() => {
+    if (selectedMetricIds.length > 0 && isReady && actions.length > 0) {
+      getRequiredActionsForMetrics(selectedMetricIds)
+        .then(actionIds => {
+          setRelevantActionIds(actionIds);
+        })
+        .catch(error => {
+          console.error('Error getting required actions:', error);
+        });
+    } else if (selectedMetricIds.length === 0 && isReady) {
+      // Reset relevant actions if no metrics selected
+      setRelevantActionIds([]);
     }
-    if (selectedMetrics.includes(2)) { // Total Passes
-      relevantActionNames.add('Complete Pass');
-      relevantActionNames.add('Incomplete Pass');
-      relevantActionNames.add('Pass Forward');
-      relevantActionNames.add('Line-breaking Pass');
-    }
-    if (selectedMetrics.includes(3)) { // Pass Completion Rate
-      relevantActionNames.add('Complete Pass');
-      relevantActionNames.add('Incomplete Pass');
-      relevantActionNames.add('Pass Forward');
-      relevantActionNames.add('Line-breaking Pass');
-    }
-    if (selectedMetrics.includes(4)) { // Dribble Success Rate
-      relevantActionNames.add('Successful Dribble');
-      relevantActionNames.add('Unsuccessful Dribble');
-    }
-    if (selectedMetrics.includes(5)) { // Successful Tackle Rate
-      relevantActionNames.add('Successful Tackle');
-      relevantActionNames.add('Missed Tackle');
-    }
-    if (selectedMetrics.includes(6)) { // Possession
-      relevantActionNames.add('Complete Pass');
-      relevantActionNames.add('Incomplete Pass');
-      relevantActionNames.add('Successful Dribble');
-      relevantActionNames.add('Unsuccessful Dribble');
-    }
+  }, [selectedMetricIds, isReady, actions.length]);
 
-    return actions.filter(action => relevantActionNames.has(action.name));
+  const getRelevantActions = () => {
+    return actions.filter(action => relevantActionIds.includes(action.id!));
   };
 
   const relevantActions = getRelevantActions();
@@ -162,28 +172,43 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
       )}
 
       {/* Action Buttons */}
-      <div className="space-y-6">
-        {Object.entries(actionsByCategory).map(([category, categoryActions]) => (
-          <div key={category} className="card">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">{category}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {categoryActions.map(action => (
-                <StatButton
-                  key={action.id}
-                  label={action.name}
-                  count={gameActions[action.id!] || 0}
-                  onIncrement={() => handleIncrement(action.id!)}
-                />
-              ))}
+      {Object.keys(actionsByCategory).length > 0 ? (
+        <div className="space-y-6">
+          {Object.entries(actionsByCategory).map(([category, categoryActions]) => (
+            <div key={category} className="card">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">{category}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {categoryActions.map(action => (
+                  <StatButton
+                    key={action.id}
+                    label={action.name}
+                    count={gameActions[action.id!] || 0}
+                    onIncrement={() => handleIncrement(action.id!)}
+                  />
+                ))}
+              </div>
             </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card">
+          <div className="text-center py-8">
+            <p className="text-gray-600">Loading action buttons...</p>
+            {selectedMetricIds.length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">No metrics selected or metrics are loading</p>
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* End Game Button */}
       <div className="card">
         <button
-          onClick={onGameEnd}
+          onClick={async () => {
+            // Update game status to 'completed'
+            await updateGame(gameId, { status: 'completed' });
+            onGameEnd();
+          }}
           className="btn-primary w-full py-3 text-lg"
         >
           End Game

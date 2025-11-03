@@ -30,7 +30,9 @@ export const GameHistory: React.FC<GameHistoryProps> = ({ onViewGame }) => {
       getGames(),
       getPlayers()
     ]);
-    setGames(gamesData);
+    // Filter to only show completed games
+    const completedGames = gamesData.filter(game => game.status === 'completed');
+    setGames(completedGames);
     setPlayers(playersData);
   };
 
