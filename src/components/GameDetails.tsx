@@ -34,31 +34,46 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
 
   const loadGameData = async () => {
     try {
+      console.log('Loading game data for gameId:', gameId);
       const [games, players, allActions] = await Promise.all([
         getGames(),
         getPlayers(),
         getActions()
       ]);
 
+      console.log('All games:', games);
       const currentGame = games.find(g => g.id === gameId);
-      if (!currentGame) return;
+      console.log('Current game:', currentGame);
+      if (!currentGame) {
+        console.error('Game not found for gameId:', gameId);
+        return;
+      }
 
       const currentPlayer = players.find(p => p.id === currentGame.playerId);
-      if (!currentPlayer) return;
+      console.log('Current player:', currentPlayer);
+      if (!currentPlayer) {
+        console.error('Player not found for playerId:', currentGame.playerId);
+        return;
+      }
 
       const actions = await getGameActions(gameId);
+      console.log('Game actions loaded:', actions);
       const actionCounts: { [actionId: number]: number } = {};
       actions.forEach(action => {
         actionCounts[action.actionId] = action.count;
       });
+      console.log('Action counts:', actionCounts);
 
       // Load selected metrics from GameMetrics table
       const gameMetrics = await getGameMetrics(gameId);
+      console.log('Game metrics loaded:', gameMetrics);
       const metricIds = gameMetrics.map(gm => gm.metricId);
+      console.log('Selected metric IDs:', metricIds);
       setSelectedMetricIds(metricIds);
 
       // Calculate metrics using selected metric IDs
       const calculatedMetrics = await calculateMetrics(gameId, metricIds);
+      console.log('Calculated metrics:', calculatedMetrics);
 
       setGame(currentGame);
       setPlayer(currentPlayer);

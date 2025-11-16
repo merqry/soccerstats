@@ -29,7 +29,7 @@
 
 **Remaining Work:**
 
-- Remove MetricActions table and related code (table is redundant since we use `requiredActions` array in Metrics table)
+- ✅ Remove MetricActions table and related code (table is redundant since we use `requiredActions` array in Metrics table) - COMPLETED
 - Implement NewGame page (player selection, opponent input, metric selection)
 - Implement GameTracker component (action buttons, real-time metric calculations)
 - Implement History page (game list with filtering)
@@ -91,20 +91,14 @@
 │ name        │         │ description    │
 │ description │         │ metricFormula  │
 │ category    │         │ category       │
-└──────┬──────┘         │ dependsOn      │
-       │ 1              │ requiredActions│
-       │ N              │ calculationType│
-       │                └──────┬─────────┘
-       │                       │ 1
-       │ N                     │ N
-       │                       │
-┌──────▼───────────────────────▼──────┐
-│         MetricActions               │ ← NEW TABLE
-│─────────────────────────────────────│
-│ id (PK)                             │
-│ metricId (FK)                       │
-│ actionId (FK)                       │
-└─────────────────────────────────────┘
+│ color       │         │ dependsOn      │
+└──────┬──────┘         │ requiredActions│
+       │ 1              │ calculationType│
+       │ N              └─────────────────┘
+       │
+       │ Note: Metrics reference Actions
+       │ via requiredActions array field
+       │ (no separate junction table needed)
 ```
 
 ### Schema Changes Required
@@ -116,15 +110,13 @@
 - Fields: `id`, `gameId`, `metricId`
 - Status: Implemented in `src/types/index.ts` and `src/db/database.ts`
 
-**New Table: MetricActions** ✅ COMPLETED
+**Removed Table: MetricActions** ✅ REMOVED
 
-- Purpose: Identify which actions are associated with each metric
-- Relationship: Many-to-many junction table between Metrics and Actions
-- Fields: `id`, `metricId`, `actionId`
-- Status: Implemented in `src/types/index.ts` and `src/db/database.ts`
-- Operations: Added CRUD functions in `src/hooks/useDB.ts`
-- **Initialization**: Automatically populated during database initialization based on `metric.requiredActions` from `src/db/seed.ts`
-- **Sync Logic**: On app startup, existing metrics are synced with seed data to ensure `requiredActions` match Metrics.md, then MetricActions table is cleared and repopulated
+- ~~Purpose: Identify which actions are associated with each metric~~
+- ~~Relationship: Many-to-many junction table between Metrics and Actions~~
+- **Reason for Removal**: Redundant since Metrics table has `requiredActions` array field that directly stores action IDs
+- **Status**: Table, interface, and all related code have been removed
+- **Note**: Metrics now reference Actions via `requiredActions` array field (no junction table needed)
 
 **Updated Game Interface:** ✅ COMPLETED
 
@@ -141,11 +133,10 @@
 
 1. **Players**: Core player information
 2. **Games**: Game metadata and context (includes `status` field)
-3. **Actions**: Pre-defined action types (seeded)
-4. **Metrics**: Pre-defined calculated metrics (seeded, includes `dependsOn` field)
+3. **Actions**: Pre-defined action types (seeded, includes `color` field)
+4. **Metrics**: Pre-defined calculated metrics (seeded, includes `dependsOn` and `requiredActions` fields)
 5. **GameActions**: Junction table - tracks action counts per game
 6. **GameMetrics**: Junction table - tracks selected metrics per game ✅
-7. **MetricActions**: Junction table - identifies which actions are associated with each metric ✅
 
 ## Implementation Steps
 
@@ -165,7 +156,8 @@
 4. ✅ Confirmed `dependsOn` field exists in `Metric` interface (optional field)
 5. ✅ Updated Dexie schema to version 2 with `gameMetrics` and `metricActions` tables
 
-   **Schema definition in `src/db/database.ts`:**
+**Schema definition in `src/db/database.ts`:**
+
    ```typescript
    this.version(2).stores({
      players: '++id, name, position, teamName, createdAt',
@@ -177,8 +169,9 @@
      metricActions: '++id, metricId, actionId'
    });
    ```
-   
-   Note: The `metrics` table includes `requiredActions` as an indexed field, which is used to populate the `metricActions` junction table.
+
+Note: The `metrics` table includes `requiredActions` as an indexed field, which is used to populate the `metricActions` junction table.
+
 6. ✅ Added CRUD operations for GameMetrics in useDB hook:
 
    - `addGameMetrics(gameId, metricIds)`
@@ -193,6 +186,7 @@
    - `deleteMetricActions(metricId)`
 
 8. ✅ Added automatic MetricActions table population logic in `initializeDB()`:
+
    - Syncs existing metrics with seed data (updates `requiredActions` and `metricFormula` to match Metrics.md)
    - Clears existing MetricActions table
    - Repopulates MetricActions table based on `metric.requiredActions` from all metrics
@@ -403,30 +397,49 @@ The `evaluateQuery()` function:
 5. ✅ Return calculated values with proper formatting
 
 ### - Tracked actions: 
+
 Shot on Target,
+
 Shot off Target,
+
 Successful Dribble,
+
 Unsuccessful Dribble,
+
 Complete Pass,
+
 Incomplete Pass,
+
 Pass Forward,
+
 Line-breaking Pass,
+
 Successful Tackle,
+
 Missed Tackle,
+
 Successful Interception,
+
 Progressive Carry,
+
 Cross into the Box
 
 ### Calculated metrics: 
 
 Shots on Target = Shots on Target / (Shot on Target + Shot off Target)
+
 Total Passes = (Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass)
+
 Pass Completion Rate = (Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes
+
 Dribble Success Rate = Successful Dribble / (Successful Dribble + Unsuccessful Dribble)
+
 Successful Tackle Rate = Successful Tackle / (Successful Tackle + Missed Tackle)
+
 Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble
 
 ### Data Flow
+
 1. User selects metrics → App determines required actions based on the MetricActions junction table
 2. User taps action buttons → Counts increment in state
 3. On each action → Recalculate all metrics

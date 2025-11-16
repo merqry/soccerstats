@@ -50,12 +50,6 @@ export interface GameMetric {
   metricId: number;
 }
 
-export interface MetricAction {
-  id?: number;
-  metricId: number;
-  actionId: number;
-}
-
 export interface MetricCalculation {
   metricId: number;
   metricName: string;

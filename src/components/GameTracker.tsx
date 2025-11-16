@@ -90,11 +90,28 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
   };
 
   const handleIncrement = async (actionId: number) => {
+    console.log('handleIncrement called with actionId:', actionId, 'gameId:', gameId);
+    if (!actionId) {
+      console.error('handleIncrement: actionId is undefined or null');
+      return;
+    }
+    if (!gameId) {
+      console.error('handleIncrement: gameId is undefined or null');
+      return;
+    }
     const previousCount = gameActions[actionId] || 0;
-    await incrementGameAction(gameId, actionId);
-    // Save to history for undo
-    setActionHistory(prev => [...prev, { actionId, previousCount }]);
-    await loadGameActions(); // Reload to get updated counts
+    console.log('Previous count:', previousCount);
+    try {
+      const result = await incrementGameAction(gameId, actionId);
+      console.log('Incremented successfully, result:', result);
+      // Save to history for undo
+      setActionHistory(prev => [...prev, { actionId, previousCount }]);
+      await loadGameActions(); // Reload to get updated counts
+      console.log('Game actions reloaded');
+    } catch (error) {
+      console.error('Error incrementing game action:', error);
+      alert(`Error incrementing action: ${error}`);
+    }
   };
 
   const handleDecrement = async (actionId: number) => {
@@ -240,13 +257,20 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
             <div className="px-2 py-1">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {relevantActions.map(action => {
-                  console.log(`Action: ${action.name}, Color: ${action.color}`);
+                  console.log(`Action: ${action.name}, ID: ${action.id}, Color: ${action.color}`);
                   return (
                     <StatButton
                       key={action.id}
                       label={action.name}
                       count={gameActions[action.id!] || 0}
-                      onIncrement={() => handleIncrement(action.id!)}
+                      onIncrement={() => {
+                        console.log('Button clicked for action:', action.name, 'ID:', action.id);
+                        if (action.id) {
+                          handleIncrement(action.id);
+                        } else {
+                          console.error('Action ID is undefined:', action);
+                        }
+                      }}
                       color={action.color}
                     />
                   );

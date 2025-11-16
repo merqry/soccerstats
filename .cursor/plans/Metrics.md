@@ -30,6 +30,8 @@ Each action has a color attribute with the following values: `green`, `light gre
 
 ## Metric Action associations
 
+**Note**: Metric-Action associations are stored in the `requiredActions` array field of the Metrics table. There is no separate MetricActions table.
+
 | Metric | Associated Actions |
 |--------|-------------------|
 | Shots on Target | Shot on Target, Shot off Target |

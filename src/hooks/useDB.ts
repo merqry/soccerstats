@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../db/database';
-import type { Player, Game, GameAction, MetricCalculation, GameMetric, MetricAction } from '../types';
+import type { Player, Game, GameAction, MetricCalculation, GameMetric } from '../types';
 import { initialActions, initialMetrics } from '../db/seed';
 
 export const useDB = () => {
@@ -142,29 +142,6 @@ export const useDB = () => {
           }
         }
         
-        // Populate MetricActions table based on metric.requiredActions from Metrics.md
-        // Clear existing data to ensure it matches the current seed data
-        await db.metricActions.clear();
-        const allMetrics = await db.metrics.toArray();
-        const metricActions: Omit<MetricAction, 'id'>[] = [];
-        
-        for (const metric of allMetrics) {
-          if (metric.id && metric.requiredActions) {
-            for (const actionId of metric.requiredActions) {
-              metricActions.push({ metricId: metric.id, actionId });
-            }
-          }
-        }
-        
-        if (metricActions.length > 0) {
-          try {
-            await db.metricActions.bulkAdd(metricActions);
-            console.log(`Populated MetricActions table with ${metricActions.length} records based on Metrics.md associations`);
-          } catch (error) {
-            console.error('Error populating MetricActions:', error);
-          }
-        }
-
         setIsReady(true);
       } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -244,60 +221,64 @@ export const useDB = () => {
   };
 
   const updateGameAction = async (gameId: number, actionId: number, count: number) => {
-    const existing = await db.gameActions.where(['gameId', 'actionId']).equals([gameId, actionId]).first();
-    if (existing) {
-      return await db.gameActions.update(existing.id!, { count, timestamp: new Date() });
+    console.log('updateGameAction called:', { gameId, actionId, count });
+    // Query by gameId first, then filter by actionId (more reliable than compound index)
+    const allGameActions = await db.gameActions.where('gameId').equals(gameId).toArray();
+    const existing = allGameActions.find(ga => ga.actionId === actionId);
+    console.log('Existing game action:', existing);
+    if (existing && existing.id) {
+      const result = await db.gameActions.update(existing.id, { count, timestamp: new Date() });
+      console.log('Updated game action, result:', result);
+      return result;
     } else {
-      return await db.gameActions.add({ gameId, actionId, count, timestamp: new Date() });
+      const result = await db.gameActions.add({ gameId, actionId, count, timestamp: new Date() });
+      console.log('Added new game action, result:', result);
+      return result;
     }
   };
 
   const getGameActions = async (gameId: number) => {
-    return await db.gameActions.where('gameId').equals(gameId).toArray();
+    console.log('getGameActions called for gameId:', gameId);
+    const result = await db.gameActions.where('gameId').equals(gameId).toArray();
+    console.log('Game actions retrieved:', result);
+    return result;
   };
 
   const incrementGameAction = async (gameId: number, actionId: number) => {
-    const existing = await db.gameActions.where(['gameId', 'actionId']).equals([gameId, actionId]).first();
+    console.log('incrementGameAction called:', { gameId, actionId });
+    // Query by gameId first, then filter by actionId (more reliable than compound index)
+    const allGameActions = await db.gameActions.where('gameId').equals(gameId).toArray();
+    const existing = allGameActions.find(ga => ga.actionId === actionId);
+    console.log('Existing record:', existing);
     const newCount = existing ? existing.count + 1 : 1;
+    console.log('New count will be:', newCount);
     return await updateGameAction(gameId, actionId, newCount);
   };
 
   // GameMetrics operations
   const addGameMetrics = async (gameId: number, metricIds: number[]) => {
+    console.log('addGameMetrics called:', { gameId, metricIds });
+    // First, delete any existing metrics for this game to avoid duplicates
+    await db.gameMetrics.where('gameId').equals(gameId).delete();
     const gameMetrics: Omit<GameMetric, 'id'>[] = metricIds.map(metricId => ({
       gameId,
       metricId
     }));
-    return await db.gameMetrics.bulkAdd(gameMetrics);
+    console.log('Adding game metrics:', gameMetrics);
+    const result = await db.gameMetrics.bulkAdd(gameMetrics);
+    console.log('Game metrics added, result:', result);
+    return result;
   };
 
   const getGameMetrics = async (gameId: number) => {
-    return await db.gameMetrics.where('gameId').equals(gameId).toArray();
+    console.log('getGameMetrics called for gameId:', gameId);
+    const result = await db.gameMetrics.where('gameId').equals(gameId).toArray();
+    console.log('Game metrics retrieved:', result);
+    return result;
   };
 
   const deleteGameMetrics = async (gameId: number) => {
     return await db.gameMetrics.where('gameId').equals(gameId).delete();
-  };
-
-  // MetricAction operations
-  const addMetricActions = async (metricId: number, actionIds: number[]) => {
-    const metricActions: Omit<MetricAction, 'id'>[] = actionIds.map(actionId => ({
-      metricId,
-      actionId
-    }));
-    return await db.metricActions.bulkAdd(metricActions);
-  };
-
-  const getMetricActions = async (metricId: number) => {
-    return await db.metricActions.where('metricId').equals(metricId).toArray();
-  };
-
-  const getActionMetrics = async (actionId: number) => {
-    return await db.metricActions.where('actionId').equals(actionId).toArray();
-  };
-
-  const deleteMetricActions = async (metricId: number) => {
-    return await db.metricActions.where('metricId').equals(metricId).delete();
   };
 
   // Dependency resolution
@@ -359,38 +340,59 @@ export const useDB = () => {
     return sum;
   };
 
-  const calculatePercentage = (metric: any, actionCounts: { [actionId: number]: number }, calculatedValues: { [metricId: number]: number }): number => {
+  const calculatePercentage = async (metric: any, actionCounts: { [actionId: number]: number }, calculatedValues: { [metricId: number]: number }): Promise<number> => {
+    if (!metric.requiredActions || metric.requiredActions.length === 0) {
+      return 0;
+    }
+
     const formula = metric.metricFormula;
     
-    if (formula.includes('Total Passes')) {
-      // Use calculated value from dependency
-      const totalPasses = calculatedValues[metric.dependsOn?.[0]] || 0;
-      const successfulPasses = (actionCounts[3] || 0) + (actionCounts[5] || 0) + (actionCounts[6] || 0);
-      return totalPasses > 0 ? (successfulPasses / totalPasses) * 100 : 0;
+    // Get actions to identify which are successful (green/light green) vs unsuccessful (light red/red)
+    const allActions = await getActions();
+    const actionMap: { [id: number]: { name: string; color?: string } } = {};
+    allActions.forEach(action => {
+      if (action.id) {
+        actionMap[action.id] = { name: action.name, color: action.color };
+      }
+    });
+    
+    // Helper to determine if an action represents a successful outcome
+    const isSuccessfulAction = (actionId: number): boolean => {
+      const action = actionMap[actionId];
+      if (!action) return false;
+      // Green or light green actions are successful outcomes
+      return action.color === 'green' || action.color === 'light green';
+    };
+    
+    // Check if metric depends on another metric (e.g., Pass Completion Rate depends on Total Passes)
+    if (metric.dependsOn && metric.dependsOn.length > 0) {
+      // Use calculated value from dependency (denominator)
+      const dependencyValue = calculatedValues[metric.dependsOn[0]] || 0;
+      if (dependencyValue === 0) return 0;
+      
+      // Calculate numerator: sum of successful actions from requiredActions
+      const successful = metric.requiredActions
+        .filter((actionId: number) => isSuccessfulAction(actionId))
+        .reduce((sum: number, actionId: number) => {
+          return sum + (actionCounts[actionId] || 0);
+        }, 0);
+      
+      return (successful / dependencyValue) * 100;
     }
     
-    if (formula.includes('Shot on Target')) {
-      const shotsOnTarget = actionCounts[1] || 0;
-      const shotsOffTarget = actionCounts[2] || 0;
-      const total = shotsOnTarget + shotsOffTarget;
-      return total > 0 ? (shotsOnTarget / total) * 100 : 0;
-    }
+    // For metrics without dependencies (e.g., Shots on Target %)
+    // Calculate percentage: successful actions / total actions
+    const successful = metric.requiredActions
+      .filter((actionId: number) => isSuccessfulAction(actionId))
+      .reduce((sum: number, actionId: number) => {
+        return sum + (actionCounts[actionId] || 0);
+      }, 0);
     
-    if (formula.includes('Dribble Success')) {
-      const successful = actionCounts[7] || 0;
-      const unsuccessful = actionCounts[8] || 0;
-      const total = successful + unsuccessful;
-      return total > 0 ? (successful / total) * 100 : 0;
-    }
+    const total = metric.requiredActions.reduce((sum: number, actionId: number) => {
+      return sum + (actionCounts[actionId] || 0);
+    }, 0);
     
-    if (formula.includes('Tackle Rate')) {
-      const successful = actionCounts[9] || 0;
-      const missed = actionCounts[10] || 0;
-      const total = successful + missed;
-      return total > 0 ? (successful / total) * 100 : 0;
-    }
-    
-    return 0;
+    return total > 0 ? (successful / total) * 100 : 0;
   };
 
   // Enhanced calculate metrics with dependency resolution
@@ -453,10 +455,11 @@ export const useDB = () => {
 
   // Fallback calculation for custom metrics
   const calculateCustomMetric = (metric: any, actionCounts: { [actionId: number]: number }, calculatedValues: { [metricId: number]: number }): number => {
-    const formula = metric.metricFormula;
-    
-    if (formula.includes('Possession')) {
-      return (actionCounts[3] || 0) + (actionCounts[4] || 0) + (actionCounts[7] || 0) + (actionCounts[8] || 0);
+    // Use requiredActions array if available
+    if (metric.requiredActions && metric.requiredActions.length > 0) {
+      return metric.requiredActions.reduce((sum: number, actionId: number) => {
+        return sum + (actionCounts[actionId] || 0);
+      }, 0);
     }
     
     return 0;
@@ -490,11 +493,6 @@ export const useDB = () => {
     addGameMetrics,
     getGameMetrics,
     deleteGameMetrics,
-    // MetricAction operations
-    addMetricActions,
-    getMetricActions,
-    getActionMetrics,
-    deleteMetricActions,
     // Metric calculation
     calculateMetrics,
     resolveMetricDependencies,
