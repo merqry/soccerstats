@@ -114,17 +114,6 @@ export const GameTracker: React.FC<GameTrackerProps> = ({
     }
   };
 
-  const handleDecrement = async (actionId: number) => {
-    const currentCount = gameActions[actionId] || 0;
-    if (currentCount > 0) {
-      const previousCount = currentCount;
-      await updateGameAction(gameId, actionId, currentCount - 1);
-      // Save to history for undo
-      setActionHistory(prev => [...prev, { actionId, previousCount }]);
-      await loadGameActions();
-    }
-  };
-
   const handleUndo = async () => {
     if (actionHistory.length > 0) {
       const lastAction = actionHistory[actionHistory.length - 1];

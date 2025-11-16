@@ -508,7 +508,6 @@ export const useDB = () => {
   // Enhanced calculate metrics with dependency resolution
   const calculateMetrics = async (gameId: number, selectedMetricIds?: number[]): Promise<MetricCalculation[]> => {
     const gameActions = await getGameActions(gameId);
-    const actions = await getActions();
     const metrics = await getMetrics();
 
     // Build action count lookup by ID
@@ -542,10 +541,10 @@ export const useDB = () => {
             break;
           case 'custom':
             // Fallback to old logic for custom calculations
-            value = calculateCustomMetric(metric, actionCounts, calculatedValues);
+            value = calculateCustomMetric(metric, actionCounts);
             break;
           default:
-            value = calculateCustomMetric(metric, actionCounts, calculatedValues);
+            value = calculateCustomMetric(metric, actionCounts);
         }
         
         calculatedValues[metric.id!] = value;
@@ -564,7 +563,7 @@ export const useDB = () => {
   };
 
   // Fallback calculation for custom metrics
-  const calculateCustomMetric = (metric: any, actionCounts: { [actionId: number]: number }, calculatedValues: { [metricId: number]: number }): number => {
+  const calculateCustomMetric = (metric: any, actionCounts: { [actionId: number]: number }): number => {
     // Use requiredActions array if available
     if (metric.requiredActions && metric.requiredActions.length > 0) {
       return metric.requiredActions.reduce((sum: number, actionId: number) => {

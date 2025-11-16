@@ -4,42 +4,9 @@ interface StatButtonProps {
   label: string;
   count: number;
   onIncrement: () => void;
-  icon?: string;
   color?: 'green' | 'light green' | 'light red' | 'red';
   className?: string;
 }
-
-// Helper function to get icon for action
-const getActionIcon = (actionName: string): string => {
-  const iconMap: { [key: string]: string } = {
-    'Shot on Target': '⚽',
-    'Shot off Target': '🎯',
-    'Successful Dribble': '🏃',
-    'Unsuccessful Dribble': '❌',
-    'Complete Pass': '✅',
-    'Incomplete Pass': '⚠️',
-    'Pass Forward': '⬆️',
-    'Line-breaking Pass': '⚡',
-    'Successful Tackle': '🛡️',
-    'Missed Tackle': '💥',
-    'Successful Interception': '✋',
-    'Progressive Carry': '🚀',
-    'Cross into the Box': '📢'
-  };
-  return iconMap[actionName] || '📊';
-};
-
-// Helper function to get color for action category
-const getActionColor = (category: string): string => {
-  const colorMap: { [key: string]: string } = {
-    'Shooting': 'bg-green-500',
-    'Passing': 'bg-yellow-500',
-    'Dribbling': 'bg-gray-700',
-    'Defending': 'bg-gray-700',
-    'Possession': 'bg-gray-700'
-  };
-  return colorMap[category] || 'bg-gray-700';
-};
 
 // Helper function to get background color class based on action color
 const getColorClasses = (color?: 'green' | 'light green' | 'light red' | 'red'): { bg: string; hover: string; border: string; text: string; bgHex: string; textHex: string; borderHex: string } => {
@@ -101,7 +68,6 @@ export const StatButton: React.FC<StatButtonProps> = ({
   label, 
   count, 
   onIncrement, 
-  icon,
   color,
   className = '' 
 }) => {
@@ -127,13 +93,19 @@ export const StatButton: React.FC<StatButtonProps> = ({
         borderColor: colorClasses.borderHex,
         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
       }}
-    >
-      <div 
-        className={`text-sm sm:text-base font-semibold text-center leading-snug px-1 break-words`}
-        style={{ color: colorClasses.textHex }}
       >
-        {label}
-      </div>
-    </button>
-  );
+        <div 
+          className="text-2xl sm:text-3xl font-bold mb-2"
+          style={{ color: colorClasses.textHex }}
+        >
+          {count}
+        </div>
+        <div 
+          className="text-sm sm:text-base font-semibold text-center leading-snug px-1 break-words"
+          style={{ color: colorClasses.textHex }}
+        >
+          {label}
+        </div>
+      </button>
+    );
 };

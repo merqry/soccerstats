@@ -24,7 +24,6 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
   const [actions, setActions] = useState<Action[]>([]);
   const [gameActions, setGameActions] = useState<{ [actionId: number]: number }>({});
   const [metrics, setMetrics] = useState<MetricCalculation[]>([]);
-  const [selectedMetricIds, setSelectedMetricIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (isReady) {
@@ -69,7 +68,6 @@ export const GameDetails: React.FC<GameDetailsProps> = ({ gameId, onBack }) => {
       console.log('Game metrics loaded:', gameMetrics);
       const metricIds = gameMetrics.map(gm => gm.metricId);
       console.log('Selected metric IDs:', metricIds);
-      setSelectedMetricIds(metricIds);
 
       // Calculate metrics using selected metric IDs
       const calculatedMetrics = await calculateMetrics(gameId, metricIds);
