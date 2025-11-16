@@ -7,8 +7,10 @@ import { GameDetailsPage } from './pages/GameDetailsPage';
 import './App.css';
 
 function App() {
+  const basename = import.meta.env.BASE_URL ?? '/';
+
   return (
-    <Router>
+    <Router basename={basename}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/players" element={<Players />} />
