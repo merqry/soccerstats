@@ -19,6 +19,11 @@ Each action has a color attribute with the following values: `green`, `light gre
 | Successful Interception | green | Highly positive - excellent defensive play |
 | Progressive Carry | light green | Positive - ball advancement |
 | Cross into the Box | light green | Positive - good attacking play |
+| Aerial duel won | light green | Positive - successful offensive play |
+| Aerial duel lost  | light red | Negative - failed attempt |
+
+
+Note successful interception is stopping an opponent's pass
 
 ## Calculated metrics: 
 1. Shots on Target = Shots on Target / (Shot on Target + Shot off Target)
@@ -26,7 +31,11 @@ Each action has a color attribute with the following values: `green`, `light gre
 3. Pass Completion Rate = (Complete Pass + Pass Forward + Line-breaking Pass) / Total Passes
 4. Dribble Success Rate = Successful Dribble / (Successful Dribble + Unsuccessful Dribble)
 5. Successful Tackle Rate = Successful Tackle / (Successful Tackle + Missed Tackle)
-6. Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble
+6. Possession = Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble + Progressive Carry
+7. Interceptions = Count of 'Successful Interception'
+8. In-box plays = Count of 'Cross into the box'
+9. Aerial Success Rate = Aerial duel won / (Aerial duel won + Aerial duel lost)
+
 
 ## Metric Action associations
 
@@ -39,4 +48,7 @@ Each action has a color attribute with the following values: `green`, `light gre
 | Pass Completion Rate | Complete Pass, Incomplete Pass, Pass Forward, Line-breaking Pass |
 | Dribble Success Rate | Successful Dribble, Unsuccessful Dribble |
 | Successful Tackle Rate | Successful Tackle, Missed Tackle |
-| Possession | Complete Pass, Incomplete Pass, Pass Forward, Line-breaking Pass, Successful Dribble, Unsuccessful Dribble |
+| Possession | Complete Pass, Incomplete Pass, Pass Forward, Line-breaking Pass, Successful Dribble, Unsuccessful Dribble, Progressive Carry |
+| Interceptions | Successful Interception |
+| In-box plays | Cross into the box |
+| Aerial Success Rate | Aerial duel won, Aerial duel lost |

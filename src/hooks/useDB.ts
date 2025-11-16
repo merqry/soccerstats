@@ -31,21 +31,57 @@ export const useDB = () => {
           }));
           await db.actions.bulkAdd(actionsWithIds as any);
         } else {
-          // Verify action IDs and colors are correct, fix if needed
+          // Verify action IDs and colors are correct, fix if needed, and add missing actions
           const existingActions = await db.actions.orderBy('id').toArray();
-          const needsReseed = existingActions.length !== expectedActionCount || 
-            existingActions.some((action, index) => action.id !== index + 1 || action.name !== initialActions[index].name);
+          const existingActionNames = new Set(existingActions.map(a => a.name));
           
-          if (needsReseed) {
-            console.warn('Action IDs or names mismatch. Re-seeding actions with fixed IDs.');
-            await db.actions.clear();
-            const actionsWithIds = initialActions.map((action, index) => ({
-              ...action,
-              id: index + 1
-            }));
-            await db.actions.bulkAdd(actionsWithIds as any);
-          } else {
+          // Check if we need to add new actions
+          const missingActions = initialActions.filter(seedAction => !existingActionNames.has(seedAction.name));
+          
+          if (missingActions.length > 0) {
+            console.log(`Found ${missingActions.length} new actions to add:`, missingActions.map(a => a.name));
+            // Add missing actions with appropriate IDs
+            for (const seedAction of missingActions) {
+              const actionIndex = initialActions.findIndex(a => a.name === seedAction.name);
+              if (actionIndex !== -1) {
+                const newAction = {
+                  ...seedAction,
+                  id: actionIndex + 1
+                };
+                // Check if ID is already taken, if so, find next available
+                const existingWithId = existingActions.find(a => a.id === newAction.id);
+                if (existingWithId) {
+                  // ID conflict - need to re-seed all actions
+                  console.warn('Action ID conflict detected. Re-seeding all actions with fixed IDs.');
+                  await db.actions.clear();
+                  const actionsWithIds = initialActions.map((action, index) => ({
+                    ...action,
+                    id: index + 1
+                  }));
+                  await db.actions.bulkAdd(actionsWithIds as any);
+                  break;
+                } else {
+                  await db.actions.add(newAction as any);
+                  console.log(`Added new action "${seedAction.name}" with ID ${newAction.id}`);
+                }
+              }
+            }
+            // Reload actions after adding
+            const updatedActions = await db.actions.orderBy('id').toArray();
             // Update existing actions to include color field if missing or incorrect
+            for (let i = 0; i < updatedActions.length && i < initialActions.length; i++) {
+              const existingAction = updatedActions[i];
+              const seedAction = initialActions[i];
+              if (existingAction && existingAction.id && seedAction.color) {
+                // Update color if it doesn't match or is missing
+                if (!existingAction.color || existingAction.color !== seedAction.color) {
+                  await db.actions.update(existingAction.id, { color: seedAction.color });
+                  console.log(`Updated action "${existingAction.name}" color from ${existingAction.color || 'none'} to ${seedAction.color}`);
+                }
+              }
+            }
+          } else {
+            // No new actions, just update existing ones
             for (let i = 0; i < existingActions.length && i < initialActions.length; i++) {
               const existingAction = existingActions[i];
               const seedAction = initialActions[i];
@@ -108,18 +144,50 @@ export const useDB = () => {
           
           await db.metrics.bulkAdd(metricsToAdd);
         } else {
-          // Update existing metrics to match seed data (sync requiredActions from Metrics.md)
+          // Update existing metrics and add new ones to match seed data (sync requiredActions from Metrics.md)
           const existingMetrics = await db.metrics.toArray();
+          
+          // Remove duplicate metrics (keep the first one, delete the rest)
+          const metricNames = new Map<string, number>();
+          const duplicatesToDelete: number[] = [];
+          
+          for (const metric of existingMetrics) {
+            if (metric.id && metric.name) {
+              const firstId = metricNames.get(metric.name);
+              if (firstId === undefined) {
+                metricNames.set(metric.name, metric.id);
+              } else {
+                // This is a duplicate, mark for deletion
+                duplicatesToDelete.push(metric.id);
+                console.log(`Found duplicate metric "${metric.name}" with ID ${metric.id}, will delete`);
+              }
+            }
+          }
+          
+          // Delete duplicates
+          if (duplicatesToDelete.length > 0) {
+            console.log(`Deleting ${duplicatesToDelete.length} duplicate metrics`);
+            for (const id of duplicatesToDelete) {
+              await db.metrics.delete(id);
+            }
+            // Reload metrics after cleanup
+            const cleanedMetrics = await db.metrics.toArray();
+            console.log(`After cleanup: ${cleanedMetrics.length} metrics remain`);
+          }
           
           console.log('Action name to ID mapping:', actionNameToId);
           console.log('Action names array:', actionNames);
           
+          // Reload metrics after potential cleanup
+          const currentMetrics = await db.metrics.toArray();
+          
           for (const seedMetric of initialMetrics) {
-            const existingMetric = existingMetrics.find(m => m.name === seedMetric.name);
-            if (existingMetric && existingMetric.id && seedMetric.requiredActions) {
-              // Map action IDs from seed (positional) to actual database IDs by name
-              const mappedActionIds: number[] = [];
-              
+            const existingMetric = currentMetrics.find(m => m.name === seedMetric.name);
+            
+            // Map action IDs from seed (positional) to actual database IDs by name
+            const mappedActionIds: number[] = [];
+            
+            if (seedMetric.requiredActions) {
               for (const actionIndex of seedMetric.requiredActions) {
                 // actionIndex is 1-based in seed data, but array is 0-based
                 const actionName = actionNames[actionIndex - 1];
@@ -130,14 +198,30 @@ export const useDB = () => {
                   console.warn(`Could not find action ID for: ${actionName} (index ${actionIndex})`);
                 }
               }
-              
+            }
+            
+            if (existingMetric && existingMetric.id) {
+              // Update existing metric
               console.log(`Updating metric "${seedMetric.name}" (ID: ${existingMetric.id}) requiredActions from [${existingMetric.requiredActions}] to [${mappedActionIds}]`);
               
-              // Update requiredActions to match Metrics.md associations with actual IDs
               await db.metrics.update(existingMetric.id, {
                 requiredActions: mappedActionIds,
-                metricFormula: seedMetric.metricFormula
+                metricFormula: seedMetric.metricFormula,
+                description: seedMetric.description,
+                category: seedMetric.category,
+                dependsOn: seedMetric.dependsOn,
+                calculationType: seedMetric.calculationType
               });
+            } else {
+              // Add new metric that doesn't exist yet
+              console.log(`Adding new metric "${seedMetric.name}" with requiredActions [${mappedActionIds}]`);
+              
+              const metricToAdd = {
+                ...seedMetric,
+                requiredActions: mappedActionIds
+              };
+              
+              await db.metrics.add(metricToAdd);
             }
           }
         }
@@ -342,11 +426,10 @@ export const useDB = () => {
 
   const calculatePercentage = async (metric: any, actionCounts: { [actionId: number]: number }, calculatedValues: { [metricId: number]: number }): Promise<number> => {
     if (!metric.requiredActions || metric.requiredActions.length === 0) {
+      console.warn(`Metric "${metric.name}" has no requiredActions`);
       return 0;
     }
 
-    const formula = metric.metricFormula;
-    
     // Get actions to identify which are successful (green/light green) vs unsuccessful (light red/red)
     const allActions = await getActions();
     const actionMap: { [id: number]: { name: string; color?: string } } = {};
@@ -359,7 +442,10 @@ export const useDB = () => {
     // Helper to determine if an action represents a successful outcome
     const isSuccessfulAction = (actionId: number): boolean => {
       const action = actionMap[actionId];
-      if (!action) return false;
+      if (!action) {
+        console.warn(`Action with ID ${actionId} not found in actionMap`);
+        return false;
+      }
       // Green or light green actions are successful outcomes
       return action.color === 'green' || action.color === 'light green';
     };
@@ -367,32 +453,56 @@ export const useDB = () => {
     // Check if metric depends on another metric (e.g., Pass Completion Rate depends on Total Passes)
     if (metric.dependsOn && metric.dependsOn.length > 0) {
       // Use calculated value from dependency (denominator)
-      const dependencyValue = calculatedValues[metric.dependsOn[0]] || 0;
-      if (dependencyValue === 0) return 0;
+      const dependencyValue = calculatedValues[metric.dependsOn[0]];
+      console.log(`Metric "${metric.name}" depends on metric ID ${metric.dependsOn[0]}, dependency value:`, dependencyValue);
+      
+      if (!dependencyValue || dependencyValue === 0) {
+        console.log(`Dependency value is 0 or undefined for "${metric.name}", returning 0`);
+        return 0;
+      }
       
       // Calculate numerator: sum of successful actions from requiredActions
-      const successful = metric.requiredActions
-        .filter((actionId: number) => isSuccessfulAction(actionId))
-        .reduce((sum: number, actionId: number) => {
-          return sum + (actionCounts[actionId] || 0);
-        }, 0);
+      let successful = 0;
+      for (const actionId of metric.requiredActions) {
+        if (isSuccessfulAction(actionId)) {
+          const count = actionCounts[actionId] || 0;
+          successful += count;
+          console.log(`  Action ID ${actionId} (${actionMap[actionId]?.name}) is successful, count: ${count}`);
+        }
+      }
       
-      return (successful / dependencyValue) * 100;
+      console.log(`  Total successful: ${successful}, dependency value: ${dependencyValue}`);
+      const result = (successful / dependencyValue) * 100;
+      console.log(`  Calculated percentage: ${result}%`);
+      return isNaN(result) ? 0 : result;
     }
     
     // For metrics without dependencies (e.g., Shots on Target %)
     // Calculate percentage: successful actions / total actions
-    const successful = metric.requiredActions
-      .filter((actionId: number) => isSuccessfulAction(actionId))
-      .reduce((sum: number, actionId: number) => {
-        return sum + (actionCounts[actionId] || 0);
-      }, 0);
+    let successful = 0;
+    let total = 0;
     
-    const total = metric.requiredActions.reduce((sum: number, actionId: number) => {
-      return sum + (actionCounts[actionId] || 0);
-    }, 0);
+    for (const actionId of metric.requiredActions) {
+      const count = actionCounts[actionId] || 0;
+      total += count;
+      if (isSuccessfulAction(actionId)) {
+        successful += count;
+        console.log(`  Action ID ${actionId} (${actionMap[actionId]?.name}) is successful, count: ${count}`);
+      } else {
+        console.log(`  Action ID ${actionId} (${actionMap[actionId]?.name}) is not successful, count: ${count}`);
+      }
+    }
     
-    return total > 0 ? (successful / total) * 100 : 0;
+    console.log(`Metric "${metric.name}": successful=${successful}, total=${total}`);
+    
+    if (total === 0) {
+      console.log(`  Total is 0, returning 0`);
+      return 0;
+    }
+    
+    const result = (successful / total) * 100;
+    console.log(`  Calculated percentage: ${result}%`);
+    return isNaN(result) ? 0 : result;
   };
 
   // Enhanced calculate metrics with dependency resolution
@@ -428,7 +538,7 @@ export const useDB = () => {
             value = calculateSum(metric, actionCounts);
             break;
           case 'percentage':
-            value = calculatePercentage(metric, actionCounts, calculatedValues);
+            value = await calculatePercentage(metric, actionCounts, calculatedValues);
             break;
           case 'custom':
             // Fallback to old logic for custom calculations

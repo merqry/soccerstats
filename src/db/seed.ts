@@ -22,7 +22,11 @@ export const initialActions: Omit<Action, 'id'>[] = [
   
   // Possession
   { name: 'Progressive Carry', description: 'Carried ball forward into advanced position', category: 'Possession', color: 'light green' },
-  { name: 'Cross into the Box', description: 'Crossed ball into the penalty area', category: 'Possession', color: 'light green' }
+  { name: 'Cross into the Box', description: 'Crossed ball into the penalty area', category: 'Possession', color: 'light green' },
+  
+  // Aerial
+  { name: 'Aerial duel won', description: 'Successfully won an aerial duel', category: 'Aerial', color: 'light green' },
+  { name: 'Aerial duel lost', description: 'Failed to win an aerial duel', category: 'Aerial', color: 'light red' }
 ];
 
 export const initialMetrics: Omit<Metric, 'id'>[] = [
@@ -74,10 +78,37 @@ export const initialMetrics: Omit<Metric, 'id'>[] = [
   {
     name: 'Possession',
     description: 'Total possession actions',
-    metricFormula: 'Complete Pass + Incomplete Pass + Successful Dribble + Unsuccessful Dribble',
+    metricFormula: 'Complete Pass + Incomplete Pass + Pass Forward + Line-breaking Pass + Successful Dribble + Unsuccessful Dribble + Progressive Carry',
     category: 'Possession',
     dependsOn: [],
-    requiredActions: [5, 6, 3, 4], // Complete Pass (5), Incomplete Pass (6), Successful Dribble (3), Unsuccessful Dribble (4)
+    requiredActions: [5, 6, 7, 8, 3, 4, 12], // Complete Pass (5), Incomplete Pass (6), Pass Forward (7), Line-breaking Pass (8), Successful Dribble (3), Unsuccessful Dribble (4), Progressive Carry (12)
     calculationType: 'sum'
+  },
+  {
+    name: 'Interceptions',
+    description: 'Count of successful interceptions',
+    metricFormula: 'Successful Interception',
+    category: 'Defending',
+    dependsOn: [],
+    requiredActions: [11], // Successful Interception (index 10+1=11)
+    calculationType: 'sum'
+  },
+  {
+    name: 'In-box plays',
+    description: 'Count of crosses into the box',
+    metricFormula: 'Cross into the Box',
+    category: 'Possession',
+    dependsOn: [],
+    requiredActions: [13], // Cross into the Box (index 12+1=13)
+    calculationType: 'sum'
+  },
+  {
+    name: 'Aerial Success Rate',
+    description: 'Percentage of successful aerial duels',
+    metricFormula: 'Aerial duel won / (Aerial duel won + Aerial duel lost)',
+    category: 'Aerial',
+    dependsOn: [],
+    requiredActions: [14, 15], // Aerial duel won (index 13+1=14), Aerial duel lost (index 14+1=15)
+    calculationType: 'percentage'
   }
 ];
