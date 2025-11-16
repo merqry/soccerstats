@@ -6,11 +6,11 @@
   "background_color": "#f8fafc",
   "display": "standalone",
   "orientation": "portrait",
-  "scope": "/",
-  "start_url": "/",
+  "scope": "/soccerstats/",
+  "start_url": "/soccerstats/",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/soccerstats/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
